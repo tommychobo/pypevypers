@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 
 #define BNO055_ADDRESS 0x28
 
@@ -19,21 +20,62 @@
 #define PRESS_D_PIN               A0
 #define CS_PIN                    10
 
-volatile bool sampleReady = false;
+#define BUFFER_SIZE               16
 
-void setupTimer1For100Hz() {
+volatile int8_t press_index = -1;
+volatile int8_t imu_index = -1;
+volatile bool reset_ordered = false;
+volatile bool refresh_data = false;
+volatile uint8_t buffer[BUFFER_SIZE];
+
+void setupSpiPeripheral() {
   cli();
-  TCCR1A = 0;
-  TCCR1B = 0;
-  OCR1A = 2499; // 16MHz / 64 / 100Hz = 2500 - 1
-  TCCR1B |= (1 << WGM12); // CTC
-  TCCR1B |= (1 << CS11) | (1 << CS10); // prescaler 64
-  TIMSK1 |= (1 << OCIE1A); // enable compare match A interrupt
+  DDRB &= ~((1 << PB3) | (1 << PB5) | (1 << PB2)); // MOSI, SCK, SS as input
+  DDRB |= (1 << PB4); // MISO as output
+  SPCR |= _BV(SPE);
+  SPCR |= _BV(SPIE);
   sei();
 }
 
-ISR(TIMER1_COMPA_vect) {
-  sampleReady = true;
+void setupTimer1(int freq){
+  if(freq <= 0){
+    return;
+  }
+  uint32_t top = 
+  TCCR1A = 0;
+  TCCR1B = (1<<WGM12)|(1<<CS11)|(1<<CS10);
+  OCR1A = 16000000UL/(64*freq) - 1;
+  TIMSK1 = (1<<OCIE1A);
+}
+
+void reset_board(){
+  wdt_enable(WDTO_15MS);
+  while(1);
+}
+
+void init_buffer(){
+  for(uint8_t i = 0; i < BUFFER_SIZE; i++){
+    buffer[i] = 0;
+  }
+}
+
+ISR(SPI_STC_vect){
+  if(digitalRead(CS_PIN) == LOW){
+    uint8_t data = SPDR;
+    if((data&0xf0) == 0x40){ // pressure sensor
+      SPDR = buffer[(data&0x0f)+12];
+    }
+    else if((data&0xf0) == 0x50){ // IMU
+      SPDR = buffer[data&0x0f];
+    }
+    else if(data == 0x60){ // reset
+      reset_ordered = true;
+    }
+  }
+}
+
+ISR(TIMER1_COMPA_vect){
+  refresh_data = true;
 }
 
 void write8(uint8_t reg, uint8_t value) {
@@ -83,42 +125,34 @@ void bno055_init() {
 }
 
 void setup() {
-  Serial.begin(115200);
   Wire.begin();
-  SPI.begin();
-  pinMode(CS_PIN, OUTPUT);
-  digitalWrite(CS_PIN, HIGH);
+  setupSpiPeripheral();
+  pinMode(CS_PIN, INPUT);
   bno055_init();
-  setupTimer1For100Hz();
+  init_buffer();
   pinMode(PRESS_D_PIN, INPUT);
 }
 
 void loop() {
-  if (sampleReady) {
-    sampleReady = false;
+  if(reset_ordered){
+    reset_board();
+  }
 
-    uint8_t buffer[14];
-    uint16_t press_data;
-
+  if(refresh_data){
+    refresh_data = false;
+    cli();
     // Read 6 bytes of accel + 6 bytes of gyro
     readLen(BNO055_ACC_DATA_X_LSB, buffer, 6);
     readLen(BNO055_GYR_DATA_X_LSB, buffer + 6, 6);
-
-    press_data = (uint16_t)analogRead(PRESS_D_PIN);
-
+    uint16_t press_data = (uint16_t)analogRead(PRESS_D_PIN);
     buffer[12] = (uint8_t)press_data&0xff;
     buffer[13] = (uint8_t)(press_data&0xff00 >> 8);
-
+    sei();
     /* SPI transmit the buffer on Arduino Nano
-     *  MISO: D12
-     *  MOSI: D11
-     *  /CS: D10
-     *  SCK: D13
-     */
-    digitalWrite(CS_PIN, LOW);
-    for(uint8_t i =0; i < 14; i++){
-      SPI.transfer(buffer[i]);
-    }
-    digitalWrite(CS_PIN, HIGH);
+      *  MISO: D12
+      *  MOSI: D11
+      *  /CS: D10
+      *  SCK: D13
+      */
   }
 }

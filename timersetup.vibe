@@ -1,0 +1,4 @@
+write a function in c for the Arduino Mega: setupPulse(int num, int freq)
+where num corresponds to the number associated with the timer that is to
+be configured, and freq is the frequency that the timer will trigger 
+its ISR. Add the name of each ISR vector for each timer as a comment.
