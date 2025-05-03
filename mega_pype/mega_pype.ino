@@ -4,8 +4,8 @@
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 
-#define SOL1      A0
-#define SOL2      A1
+#define SOL1      A0 // assumed atmospheric solenoid
+#define SOL2      A1 // assumed pressurized solenoid
 #define PRESS_T   A14
 #define PSI_MAX   150
 
@@ -17,6 +17,7 @@
 #define BUFFER_SIZE   14
 #define CS_PIN        53
 
+const uint16_t toleranceMicro = 1000000;
 
 volatile uint8_t buffer[BUFFER_SIZE];
 volatile uint8_t bufferIndex = 0;
@@ -107,6 +108,8 @@ void setup() {
 }
 
 void reset_board(){
+  digitalWrite(SOL1, LOW);
+  digitalWrite(SOL2, LOW);
   wdt_enable(WDTO_15MS); //watchdog timer for 15 ms
   while(1); //busy wait for the reset
 }
@@ -177,7 +180,7 @@ void transmitIMU(){
   Serial.println(gyroRawXYZ[2]);
 }
 
-void loop() {
+void manageSPI(){
   if(spi_first_byte){  
     bufferIndex = 0;
     spi_first_byte = false;
@@ -204,7 +207,9 @@ void loop() {
       imu_request = false;
     }
   }
+}
 
+void serialControls(){
   if(Serial.available()){
     char command = Serial.read();
     if(command == 'R'){
@@ -214,5 +219,26 @@ void loop() {
       reset_board();
     }
   }
+}
+
+void updateSolenoids(uint8_t psi_target){
+  uint32_t target_micro = psi_target*1000000;
+  bool closeAtmospheric = false;
+  bool closePressurized = false;
+  if(target_micro < microPsi_D){
+    closePressurized = true;
+  }
+  if(target_micro+toleranceMicro > microPsi_D){
+    closeAtmospheric = true;
+  }
+  digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
+  digitalWrite(SOL2, closePressurized ? HIGH : LOW);
+}
+
+void loop() {
+  manageSPI();
   
+  serialControls();
+
+  updateSolenoids(15);
 }
