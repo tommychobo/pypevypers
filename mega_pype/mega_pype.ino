@@ -82,7 +82,7 @@ void setupPulse(int num, int freq){
       TCCR5A = 0;
       TCCR5B = (1<<WGM52)|(1<<CS51)|(1<<CS50);
       OCR5A = top;
-      TIMSK4 = (1<<OCIE5A);
+      TIMSK5 = (1<<OCIE5A);
       break;
     default:
       break;
