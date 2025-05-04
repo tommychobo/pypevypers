@@ -8,14 +8,18 @@
 #include <sys/time.h>
 #include <time.h>
 #include <ncurses.h>
+#include <curses.h>
 
 #define BUFFER_SIZE 256
 #define PREFIX_COUNT 8
-#define SERIAL_PORT "/dev/ttyUSB0"
+#define SERIAL_PORT "/dev/ttyACM0"
 #define SAMPLE_RATE 25
 #define DISPLAY_RATE 10
 
 const char *prefixes[PREFIX_COUNT] = {"PD:", "PT:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
+
+int32_t buffer[PREFIX_COUNT] = {0};
+float buffer_conv[PREFIX_COUNT] = {0};
 
 int index_from_prefix(const char *line) {
     for (int i = 0; i < PREFIX_COUNT; ++i) {
@@ -71,27 +75,27 @@ uint64_t current_timestamp_ms() {
     return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-void convert_buffer(int32_t* buf, float* cbuf){
+void convert_buffer(){
     for(int i = 0; i < PREFIX_COUNT; i++){
         if(i < 2){ /*Pressure*/
-            *(cbuf+i) = (float)(*(buf+i)/1000000.0); /*psi*/
+            (buffer_conv[i]) = (float)((buffer[i])/1000000.0); /*psi*/
         }else if(i < 5){ /*Acceleration*/
-            *(cbuf+i) = (float)(*(buf+i)/100.0); /*m/s/s*/
+            (buffer_conv[i]) = (float)((buffer[i])/100.0); /*m/s/s*/
         }else if(i < 8){ /*Angular Velocity*/
-            *(cbuf+i) = (float)(*(buf+i)/16.0); /*deg/s*/
+            (buffer_conv[i]) = (float)((buffer[i])/16.0); /*deg/s*/
         }
     }
 }
 
-void update_display(float* buf, uint64_t stamp){
+void update_display(uint64_t stamp){
     clear();
-    mvprintw(0, 0, "TIME: \t\t\t %ld", stamp);
-    mvprintw(0, 1, "DEVICE PRESSURE: \t\t\t %.2f", *buf);
-    mvprintw(0, 2, "INTERSECTION PRESSURE: \t\t\t %.2f", *(buf+1));
-    mvprintw(0, 3, "ACCELERATION: (%.2f, %.2f, %.2f)", 
-            *(buf+2), *(buf+3), *(buf+4));
-    mvprintw(0, 4, "ANGULAR VELOCITY: (%.2f, %.2f, %.2f)", 
-            *(buf+5), *(buf+6), *(buf+7));
+    mvprintw(0, 0, "TIME: \t\t\t\t %ld", stamp);
+    mvprintw(2, 0, "DEVICE PRESSURE: \t\t %.2f", (double) buffer_conv[0]);
+    mvprintw(4, 0, "INTERSECTION PRESSURE: \t\t %.2f", (double) buffer_conv[1]);
+    mvprintw(6, 0, "ACCELERATION: \t\t\t (%.2f, %.2f, %.2f)", 
+            (double) buffer_conv[2], (double) buffer_conv[3], (double)buffer_conv[4]);
+    mvprintw(8, 0, "ANGULAR VELOCITY: \t\t (%.2f, %.2f, %.2f)", 
+            (double) buffer_conv[5], (double) buffer_conv[6], (double) buffer_conv[7]);
     refresh();
 }
 
@@ -107,8 +111,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int32_t buffer[PREFIX_COUNT] = {0};
-    float buffer_conv[PREFIX_COUNT] = {0};
 
     int serial_fd = setup_serial(SERIAL_PORT);
     if (serial_fd < 0) return 1;
@@ -142,7 +144,7 @@ int main(int argc, char *argv[]) {
 
         uint64_t now = current_timestamp_ms();
         if (now - last_write >= (1000/SAMPLE_RATE)) {
-            fprintf(csv, "%ld", time(NULL)); // unix seconds
+            fprintf(csv, "%ld", now); // time(NULL) is unix seconds
             for (int i = 0; i < PREFIX_COUNT; ++i) {
                 fprintf(csv, ",%d", buffer[i]);
             }
@@ -150,10 +152,9 @@ int main(int argc, char *argv[]) {
             fflush(csv);
             last_write = now;
         }
-
         if(now - last_display >= (1000/DISPLAY_RATE)){
-            convert_buffer(&buffer, &buffer_conv);
-            update_display(&buffer_conv, now);
+            convert_buffer();
+            update_display(now);
         }
     }
 

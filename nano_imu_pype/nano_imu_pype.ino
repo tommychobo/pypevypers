@@ -22,11 +22,11 @@
 
 #define BUFFER_SIZE               16
 
-volatile int8_t press_index = -1;
-volatile int8_t imu_index = -1;
+int8_t press_index = -1;
+int8_t imu_index = -1;
 volatile bool reset_ordered = false;
 volatile bool refresh_data = false;
-volatile uint8_t buffer[BUFFER_SIZE];
+uint8_t buffer[BUFFER_SIZE];
 
 void setupSpiPeripheral() {
   cli();
@@ -41,7 +41,6 @@ void setupTimer1(int freq){
   if(freq <= 0){
     return;
   }
-  uint32_t top = 
   TCCR1A = 0;
   TCCR1B = (1<<WGM12)|(1<<CS11)|(1<<CS10);
   OCR1A = 16000000UL/(64*freq) - 1;

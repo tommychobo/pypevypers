@@ -4,6 +4,11 @@
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 
+
+#define TARGET_PSI          15
+#define SAMPLE_RATE_IMU     100
+#define SAMPLE_RATE_PRESS   30
+
 #define SOL1      A0 // assumed atmospheric solenoid
 #define SOL2      A1 // assumed pressurized solenoid
 #define PRESS_T   A14
@@ -17,7 +22,7 @@
 #define BUFFER_SIZE   14
 #define CS_PIN        53
 
-const uint16_t toleranceMicro = 1000000;
+const uint32_t toleranceMicro = 1000000;
 
 volatile uint8_t buffer[BUFFER_SIZE];
 volatile uint8_t bufferIndex = 0;
@@ -25,12 +30,12 @@ volatile bool press_d_request = false;
 volatile bool imu_request = false;
 volatile bool spi_first_byte = false;
 
-uint16_t accelRawXYZ[3];
-uint16_t gyroRawXYZ[3];
-uint16_t pressRawD;
-uint16_t pressRawT;
-uint32_t microPsi_D;
-uint32_t microPsi_T;
+volatile int16_t accelRawXYZ[3];
+volatile int16_t gyroRawXYZ[3];
+volatile uint16_t pressRawD;
+volatile uint16_t pressRawT;
+volatile int32_t microPsi_D;
+volatile int32_t microPsi_T;
 
 /*
  * 50 - yellow - MISO
@@ -57,7 +62,7 @@ void setupPulse(int num, int freq){
       TCCR1B = (1<<WGM12)|(1<<CS11)|(1<<CS10);
       OCR1A = top;
       TIMSK1 = (1<<OCIE1A);
-      break:
+      break;
     case 3:
     //ISR: TIMER3_COMPA_vect
       TCCR3A = 0;
@@ -102,8 +107,8 @@ void setup() {
 
   cli(); //disable interrupts
   
-  setupPulse(1, 100); // sample IMU 100 Hz
-  setupPulse(3, 30); // sample pressure sensors 30 Hz
+  setupPulse(1, SAMPLE_RATE_IMU); // sample IMU 100 Hz
+  setupPulse(3, SAMPLE_RATE_PRESS); // sample pressure sensors 30 Hz
   sei(); //enable interrupts
 }
 
@@ -129,7 +134,6 @@ ISR(TIMER1_COMPA_vect){
     press_d_request = true;
     imu_request = false;
   }
-  press_index = data&0x0f;
 }
 
 ISR(TIMER3_COMPA_vect){
@@ -240,5 +244,5 @@ void loop() {
   
   serialControls();
 
-  updateSolenoids(15);
+  updateSolenoids(TARGET_PSI);
 }
