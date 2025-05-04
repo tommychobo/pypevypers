@@ -31,8 +31,8 @@ int init_serial(const char* port){
     struct termios options;
     tcgetattr(fd, &options);
 
-    cfsetispeed(&options, B9600);
-    cfsetospeed(&options, B9600);
+    cfsetispeed(&options, B115200);
+    cfsetospeed(&options, B115200);
 
     options.c_cflag = CS8 | CLOCAL | CREAD; // 8 data bits, local, read enabled
     options.c_iflag = IGNPAR;   // ignore framing and parity errors
