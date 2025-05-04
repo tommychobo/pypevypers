@@ -126,10 +126,13 @@ void bno055_init() {
 void setup() {
   Wire.begin();
   setupSpiPeripheral();
-  pinMode(CS_PIN, INPUT);
+  pinMode(CS_PIN, INPUT_PULLUP);
   bno055_init();
   init_buffer();
   pinMode(PRESS_D_PIN, INPUT);
+  cli();
+  setupTimer1(100);
+  sei();
 }
 
 void loop() {
@@ -145,7 +148,7 @@ void loop() {
     readLen(BNO055_GYR_DATA_X_LSB, buffer + 6, 6);
     uint16_t press_data = (uint16_t)analogRead(PRESS_D_PIN);
     buffer[12] = (uint8_t)press_data&0xff;
-    buffer[13] = (uint8_t)(press_data&0xff00 >> 8);
+    buffer[13] = (uint8_t)((press_data&0xff00) >> 8);
     sei();
     /* SPI transmit the buffer on Arduino Nano
       *  MISO: D12
