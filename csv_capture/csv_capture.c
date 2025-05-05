@@ -88,7 +88,7 @@ void convert_buffer(){
 }
 
 void update_display(uint64_t stamp){
-    clear();
+    
     mvprintw(0, 0, "TIME: \t\t\t\t %ld", stamp);
     mvprintw(2, 0, "DEVICE PRESSURE: \t\t %.2f", (double) buffer_conv[0]);
     mvprintw(4, 0, "INTERSECTION PRESSURE: \t\t %.2f", (double) buffer_conv[1]);
@@ -97,6 +97,7 @@ void update_display(uint64_t stamp){
     mvprintw(8, 0, "ANGULAR VELOCITY: \t\t (%.2f, %.2f, %.2f)", 
             (double) buffer_conv[5], (double) buffer_conv[6], (double) buffer_conv[7]);
     refresh();
+    clear();
 }
 
 int main(int argc, char *argv[]) {
@@ -124,24 +125,32 @@ int main(int argc, char *argv[]) {
     uint64_t last_write = 0;
     uint64_t last_display = 0;
 
+    int read_number = 0;
+
     while (1) {
         ssize_t n = read(serial_fd, &c, 1);
         if (n <= 0) continue;
 
-        if (c == '\n') {
+        if(c == ':'){
+            read_number = 1;
+        }else if(c == '\n'){
+            read_number = 0;
+
             line[line_len] = '\0';
 
             int idx = index_from_prefix(line);
+            
             if (idx != -1) {
-                int val = atoi(line + 3);
+                int val = strtol((line), NULL, 10);
                 buffer[idx] = val;
+                //mvprintw(10, 0, "added %d to index %d", val, idx);
             }
 
             line_len = 0;
-        } else if (line_len < BUFFER_SIZE - 1) {
+        } else if (line_len < BUFFER_SIZE - 1 && read_number) {
             line[line_len++] = c;
         }
-
+        //mvprintw(11, 0, "line: %s", line);
         uint64_t now = current_timestamp_ms();
         if (now - last_write >= (1000/SAMPLE_RATE)) {
             fprintf(csv, "%ld", now); // time(NULL) is unix seconds
