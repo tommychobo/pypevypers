@@ -139,11 +139,11 @@ int main(int argc, char *argv[]) {
             line[line_len] = '\0';
 
             int idx = index_from_prefix(line);
-            
+            mvprintw(10, 0, "added %s to index %d", line, idx);
             if (idx != -1) {
                 int val = strtol((line), NULL, 10);
                 buffer[idx] = val;
-                //mvprintw(10, 0, "added %d to index %d", val, idx);
+                
             }
 
             line_len = 0;

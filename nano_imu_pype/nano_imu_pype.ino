@@ -59,17 +59,15 @@ void init_buffer(){
 }
 
 ISR(SPI_STC_vect){
-  if(digitalRead(CS_PIN) == LOW){
-    uint8_t data = SPDR;
-    if((data&0xf0) == 0x40){ // pressure sensor
-      SPDR = buffer[(data&0x0f)+12];
-    }
-    else if((data&0xf0) == 0x50){ // IMU
-      SPDR = buffer[data&0x0f];
-    }
-    else if(data == 0x60){ // reset
-      reset_ordered = true;
-    }
+  uint8_t data = SPDR;
+  if((data&0xf0) == 0x40){ // pressure sensor
+    SPDR = buffer[(data&0x0f)+12];
+  }
+  else if((data&0xf0) == 0x50){ // IMU
+    SPDR = buffer[data&0x0f];
+  }
+  else if(data == 0x60){ // reset
+    reset_ordered = true;
   }
 }
 
@@ -115,8 +113,8 @@ void bno055_init() {
   delay(20);
 
   // Optional: Reset the sensor
-  // write8(BNO055_SYS_TRIGGER_ADDR, 0x20);
-  // delay(650); // wait for reset
+  write8(BNO055_SYS_TRIGGER_ADDR, 0x20);
+  delay(650); // wait for reset
 
   // Set to IMU mode
   write8(BNO055_OPR_MODE_ADDR, OPERATION_MODE_IMU);
@@ -142,14 +140,12 @@ void loop() {
 
   if(refresh_data){
     refresh_data = false;
-    cli();
     // Read 6 bytes of accel + 6 bytes of gyro
     readLen(BNO055_ACC_DATA_X_LSB, buffer, 6);
     readLen(BNO055_GYR_DATA_X_LSB, buffer + 6, 6);
     uint16_t press_data = (uint16_t)analogRead(PRESS_D_PIN);
     buffer[12] = (uint8_t)press_data&0xff;
     buffer[13] = (uint8_t)((press_data&0xff00) >> 8);
-    sei();
     /* SPI transmit the buffer on Arduino Nano
       *  MISO: D12
       *  MOSI: D11
