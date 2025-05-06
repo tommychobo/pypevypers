@@ -17,7 +17,7 @@
 #define OPERATION_MODE_IMU        0x08
 #define OPERATION_MODE_CONFIG     0x00
 
-#define PRESS_D_PIN               A0
+#define PRESS_D_PIN               14
 #define CS_PIN                    10
 
 #define BUFFER_SIZE               16
@@ -26,7 +26,7 @@ int8_t press_index = -1;
 int8_t imu_index = -1;
 volatile bool reset_ordered = false;
 volatile bool refresh_data = false;
-uint8_t buffer[BUFFER_SIZE];
+volatile uint8_t buffer[BUFFER_SIZE];
 
 void setupSpiPeripheral() {
   cli();
@@ -104,7 +104,7 @@ void bno055_init() {
   // Make sure we're communicating
   uint8_t chipID = read8(BNO055_CHIP_ID_ADDR);
   if (chipID != 0xA0) {
-    Serial.println("Error: BNO055 not detected.");
+    //Serial.println("Error: BNO055 not detected.");
     while (1);
   }
 
@@ -122,6 +122,7 @@ void bno055_init() {
 }
 
 void setup() {
+  Serial.begin(115200);
   Wire.begin();
   setupSpiPeripheral();
   pinMode(CS_PIN, INPUT_PULLUP);
@@ -131,6 +132,18 @@ void setup() {
   cli();
   setupTimer1(100);
   sei();
+}
+
+void diagnostics(){
+  Serial.println("IMU:");
+  Serial.println(buffer[0]<<8 + buffer[1]);
+  Serial.println(buffer[2]<<8 + buffer[3]);
+  Serial.println(buffer[4]<<8 + buffer[5]);
+  Serial.println(buffer[6]<<8 + buffer[7]);
+  Serial.println(buffer[8]<<8 + buffer[9]);
+  Serial.println(buffer[10]<<8 + buffer[11]);
+  Serial.println("Device Pressure:");
+  Serial.println(buffer[13]<<8 + buffer[12]);
 }
 
 void loop() {
@@ -144,13 +157,17 @@ void loop() {
     readLen(BNO055_ACC_DATA_X_LSB, buffer, 6);
     readLen(BNO055_GYR_DATA_X_LSB, buffer + 6, 6);
     uint16_t press_data = (uint16_t)analogRead(PRESS_D_PIN);
+    
+    
     buffer[12] = (uint8_t)press_data&0xff;
     buffer[13] = (uint8_t)((press_data&0xff00) >> 8);
+    
     /* SPI transmit the buffer on Arduino Nano
       *  MISO: D12
       *  MOSI: D11
       *  /CS: D10
       *  SCK: D13
       */
+    //diagnostics();
   }
 }

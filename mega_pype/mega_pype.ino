@@ -120,7 +120,7 @@ void reset_board(){
 }
 
 ISR(SPI_STC_vect){
-  if(digitalRead(CS_PIN) == LOW && (press_d_request || imu_request)){
+  if(press_d_request || imu_request){
     uint8_t data = SPDR;
     if(bufferIndex != 0){
       buffer[bufferIndex-1] = data;
@@ -145,7 +145,7 @@ ISR(TIMER3_COMPA_vect){
 }
 
 void grab_press_data(){
-  pressRawD = (((uint16_t)buffer[1])<<8) + (uint16_t)buffer[0];
+  pressRawD = (((uint16_t)buffer[1])<<8) + (uint16_t)(buffer[0]&0xff);
   pressRawT = (uint16_t)analogRead(PRESS_T);
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
@@ -185,6 +185,7 @@ void transmitIMU(){
 }
 
 void manageSPI(){
+  uint8_t data;
   if(spi_first_byte){  
     bufferIndex = 0;
     spi_first_byte = false;
@@ -192,24 +193,32 @@ void manageSPI(){
   if(press_d_request){
     digitalWrite(CS_PIN, LOW);
     SPI.transfer((uint8_t)(SEND_PRESSD + (bufferIndex&0x0f)));
+    data = (uint8_t)SPDR;
     digitalWrite(CS_PIN, HIGH);
-    bufferIndex++;
+    if(bufferIndex != 0){
+      buffer[bufferIndex-1] = data;
+    }
     if(bufferIndex >= 3){
       grab_press_data();
       transmitPressure();
       press_d_request = false;
     }
+    bufferIndex++;
   }
   if(imu_request){
     digitalWrite(CS_PIN, LOW);
     SPI.transfer((uint8_t)(SEND_IMU + (bufferIndex&0x0f)));
+    data = (uint8_t)SPDR;
     digitalWrite(CS_PIN, HIGH);
-    bufferIndex++;
+    if(bufferIndex != 0){
+      buffer[bufferIndex-1] = data;
+    }
     if(bufferIndex >= 13){
       grab_IMU_data();
       transmitIMU();
       imu_request = false;
     }
+    bufferIndex++;
   }
 }
 

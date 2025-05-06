@@ -16,7 +16,7 @@
 #define SAMPLE_RATE 25
 #define DISPLAY_RATE 10
 
-const char *prefixes[PREFIX_COUNT] = {"PD:", "PT:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
+const char *prefixes[PREFIX_COUNT] = {"DP:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
 
 int32_t buffer[PREFIX_COUNT] = {0};
 float buffer_conv[PREFIX_COUNT] = {0};
@@ -125,29 +125,26 @@ int main(int argc, char *argv[]) {
     uint64_t last_write = 0;
     uint64_t last_display = 0;
 
-    int read_number = 0;
 
     while (1) {
         ssize_t n = read(serial_fd, &c, 1);
         if (n <= 0) continue;
 
-        if(c == ':'){
-            read_number = 1;
-        }else if(c == '\n'){
-            read_number = 0;
+        
+        if(c == '\n'){
 
             line[line_len] = '\0';
 
             int idx = index_from_prefix(line);
-            mvprintw(10, 0, "added %s to index %d", line, idx);
+            
             if (idx != -1) {
-                int val = strtol((line), NULL, 10);
+                int val = strtol((line+3), NULL, 10);
                 buffer[idx] = val;
-                
+                mvprintw(10, 0, "index %d", idx);
             }
 
             line_len = 0;
-        } else if (line_len < BUFFER_SIZE - 1 && read_number) {
+        } else if (line_len < BUFFER_SIZE - 1) {
             line[line_len++] = c;
         }
         //mvprintw(11, 0, "line: %s", line);
