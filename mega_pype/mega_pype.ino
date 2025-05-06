@@ -253,5 +253,5 @@ void loop() {
   
   serialControls();
 
-  updateSolenoids(TARGET_PSI);
+  //updateSolenoids(TARGET_PSI);
 }
