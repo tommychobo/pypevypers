@@ -17,6 +17,7 @@
 #define SEND_PRESSD   0x40
 #define SEND_IMU      0x50
 #define SEND_RESET    0x60
+//REMEMBER: we are using 0x10, 0x20, 0x30 for sending frequency updates to the nano
 
 
 #define BUFFER_SIZE   14
@@ -40,8 +41,8 @@ volatile int32_t microPsi_T;
 
 bool command_incoming = false;
 bool command_ready = false;
-bool test_running = true;
-bool solenoid_control = true;
+bool test_running = false;
+bool solenoid_control = false;
 int command_index = 0;
 char command[SERIAL_BUFFER_SIZE];
 
@@ -231,15 +232,25 @@ void manageSPI(){
   }
 }
 
+void update_nano_freq(int freq){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer((uint8_t)(0x10 + (freq&0x00f)));
+  SPI.transfer((uint8_t)(0x20 + ((freq&0x0f0)>>4)));
+  SPI.transfer((uint8_t)(0x30 + ((freq&0xf00)>>8)));
+  uint8_t data = (uint8_t)SPDR;
+  if(data != freq&0xff){
+    Serial.println("frequency update failed");
+    delay(500);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
 void serialControls(){
   if(Serial.available()){
     char com = Serial.read();
     if(com == '~'){
       command_incoming = true;
       command_index = 0;
-    }
-    if(com == 'R'){
-      
     }
     if(command_incoming){
       if(com == '\n'){
@@ -255,31 +266,48 @@ void serialControls(){
     if(command_ready){
       command_ready = false;
       switch(command[0]){
-        case 'T': //change the target PSI
+        case 'P': //change the frequency of the pressure sensor
+          int targetFreqP = atoi((char*)(command+1));
+          if(targetFreqP > 0 && targetFreqP < 1000){
+            setupPulse(3, targetFreqP);
+            update_nano_freq(targetFreqP);
+          }
+          else{
+            Serial.println("Invalid pressure target frequency");
+            delay(500);
+          }
+          break;
+        case 'E': //start/stop the test
+          if(test_running){
+            test_running = false;
+            Serial.println("Stopping test...");
+            delay(200);
+          }
+          else{
+            test_running = true;
+            Serial.println("Starting test...");
+            delay(200);
+          }
+          break;
+        case 'N': //change the target PSI
           int targetPsi = atoi((char*)(command+1));
           if(targetPsi > 0 && targetPsi < PSI_MAX){
             updateSolenoids(targetPsi);
           }
           else{
             Serial.println("Invalid target PSI");
+            delay(500);
           }
           break;
         case 'I': //change the frequency of the IMU
           int targetFreq = atoi((char*)(command+1));
           if(targetFreq > 0 && targetFreq < 1000){
             setupPulse(1, targetFreq);
+            update_nano_freq(targetFreq);
           }
           else{
-            Serial.println("Invalid target frequency");
-          }
-          break;
-        case 'P': //change the frequency of the pressure sensor
-          int targetFreqP = atoi((char*)(command+1));
-          if(targetFreqP > 0 && targetFreqP < 1000){
-            setupPulse(3, targetFreqP);
-          }
-          else{
-            Serial.println("Invalid target frequency");
+            Serial.println("Invalid IMU target frequency");
+            delay(500);
           }
           break;
         case 'R': //reset the board
@@ -291,6 +319,18 @@ void serialControls(){
           break;
         default:
           Serial.println("Invalid command");
+          break;
+        case 'S': //solenoid control
+          if(solenoid_control){
+            solenoid_control = false;
+            Serial.println("Stopping solenoid control...");
+            delay(200);
+          }
+          else{
+            solenoid_control = true;
+            Serial.println("Starting solenoid control...");
+            delay(200);
+          }
           break;
       }
     }
