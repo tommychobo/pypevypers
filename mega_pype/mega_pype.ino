@@ -20,6 +20,7 @@
 
 
 #define BUFFER_SIZE   14
+#define SERIAL_BUFFER_SIZE 32
 #define CS_PIN        53
 
 const uint32_t toleranceMicro = 1000000;
@@ -36,6 +37,14 @@ volatile uint16_t pressRawD;
 volatile uint16_t pressRawT;
 volatile int32_t microPsi_D;
 volatile int32_t microPsi_T;
+
+bool command_incoming = false;
+bool command_ready = false;
+bool test_running = true;
+bool solenoid_control = true;
+int command_index = 0;
+char command[SERIAL_BUFFER_SIZE];
+
 
 /*
  * 50 - yellow - MISO
@@ -224,14 +233,69 @@ void manageSPI(){
 
 void serialControls(){
   if(Serial.available()){
-    char command = Serial.read();
-    if(command == 'R'){
-      digitalWrite(CS_PIN, LOW);
-      SPI.transfer(SEND_RESET);
-      delay(10);
-      reset_board();
+    char com = Serial.read();
+    if(com == '~'){
+      command_incoming = true;
+      command_index = 0;
+    }
+    if(com == 'R'){
+      
+    }
+    if(command_incoming){
+      if(com == '\n'){
+        command_incoming = false;
+        command[command_index] = '\0';
+        command_ready = true;
+      }
+      else{
+        command[command_index] = com;
+        command_index++;
+      }
+    }
+    if(command_ready){
+      command_ready = false;
+      switch(command[0]){
+        case 'T': //change the target PSI
+          int targetPsi = atoi((char*)(command+1));
+          if(targetPsi > 0 && targetPsi < PSI_MAX){
+            updateSolenoids(targetPsi);
+          }
+          else{
+            Serial.println("Invalid target PSI");
+          }
+          break;
+        case 'I': //change the frequency of the IMU
+          int targetFreq = atoi((char*)(command+1));
+          if(targetFreq > 0 && targetFreq < 1000){
+            setupPulse(1, targetFreq);
+          }
+          else{
+            Serial.println("Invalid target frequency");
+          }
+          break;
+        case 'P': //change the frequency of the pressure sensor
+          int targetFreqP = atoi((char*)(command+1));
+          if(targetFreqP > 0 && targetFreqP < 1000){
+            setupPulse(3, targetFreqP);
+          }
+          else{
+            Serial.println("Invalid target frequency");
+          }
+          break;
+        case 'R': //reset the board
+          Serial.println("Resetting board...");
+          digitalWrite(CS_PIN, LOW);
+          SPI.transfer(SEND_RESET);
+          delay(10);
+          reset_board();
+          break;
+        default:
+          Serial.println("Invalid command");
+          break;
+      }
     }
   }
+  
 }
 
 void updateSolenoids(uint8_t psi_target){
@@ -249,9 +313,11 @@ void updateSolenoids(uint8_t psi_target){
 }
 
 void loop() {
-  manageSPI();
-  
+  if(test_running){
+    manageSPI();
+    if(solenoid_control){
+      updateSolenoids(TARGET_PSI);
+    }
+  }
   serialControls();
-
-  //updateSolenoids(TARGET_PSI);
 }
