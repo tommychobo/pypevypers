@@ -22,11 +22,14 @@
 
 #define BUFFER_SIZE               16
 
+#define MAX_SAMPLE_RATE          1000
+
 int8_t press_index = -1;
 int8_t imu_index = -1;
 volatile bool reset_ordered = false;
 volatile bool refresh_data = false;
 volatile uint8_t buffer[BUFFER_SIZE];
+volatile uint16_t timer_freq_buffer = 100;
 
 void setupSpiPeripheral() {
   cli();
@@ -60,14 +63,31 @@ void init_buffer(){
 
 ISR(SPI_STC_vect){
   uint8_t data = SPDR;
-  if((data&0xf0) == 0x40){ // pressure sensor
-    SPDR = buffer[(data&0x0f)+12];
-  }
-  else if((data&0xf0) == 0x50){ // IMU
-    SPDR = buffer[data&0x0f];
-  }
-  else if(data == 0x60){ // reset
-    reset_ordered = true;
+  switch(data&0xf0){
+    case 0x10:
+      timer_freq_buffer = (uint16_t)(data&0x0f);
+      break;
+    case 0x20:
+      timer_freq_buffer |= ((uint16_t)(data&0x0f))<<4;
+      SPDR = (uint8_t)(timer_freq_buffer&0xff); // send checksum confirmation
+      break;
+    case 0x30:
+      timer_freq_buffer |= ((uint16_t)(data&0x0f))<<8;
+      if(timer_freq_buffer < MAX_SAMPLE_RATE){
+        setupTimer1(timer_freq_buffer);
+      }
+      break;
+    case 0x40:
+      SPDR = buffer[(data&0x0f)+12];
+      break;
+    case 0x50:
+      SPDR = buffer[data&0x0f];
+      break;
+    case 0x60:
+      reset_ordered = true;
+      break;
+    default:
+      break;
   }
 }
 
@@ -130,7 +150,7 @@ void setup() {
   init_buffer();
   pinMode(PRESS_D_PIN, INPUT);
   cli();
-  setupTimer1(100);
+  setupTimer1(timer_freq_buffer);
   sei();
 }
 

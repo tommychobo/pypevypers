@@ -5,9 +5,6 @@
 #include <avr/wdt.h>
 
 
-#define TARGET_PSI          15
-#define SAMPLE_RATE_IMU     100
-#define SAMPLE_RATE_PRESS   30
 
 #define SOL1      A0 // assumed atmospheric solenoid
 #define SOL2      A1 // assumed pressurized solenoid
@@ -25,6 +22,11 @@
 #define CS_PIN        53
 
 const uint32_t toleranceMicro = 1000000;
+
+int target_psi = 15;
+int sample_rate_imu = 100;
+int sample_rate_press = 30;
+
 
 volatile uint8_t buffer[BUFFER_SIZE];
 volatile uint8_t bufferIndex = 0;
@@ -61,6 +63,7 @@ void setupPulse(int num, int freq){
   uint32_t top;
   const uint32_t F_CPU_HZ = 16000000UL;
   const uint16_t prescaler = 64;
+  
   if(freq <= 0){
     return;
   }
@@ -117,8 +120,8 @@ void setup() {
 
   cli(); //disable interrupts
   
-  setupPulse(1, SAMPLE_RATE_IMU); // sample IMU 100 Hz
-  setupPulse(3, SAMPLE_RATE_PRESS); // sample pressure sensors 30 Hz
+  setupPulse(1, sample_rate_imu); // sample IMU 100 Hz
+  setupPulse(3, sample_rate_press); // sample pressure sensors 30 Hz
   sei(); //enable interrupts
 }
 
@@ -129,6 +132,7 @@ void reset_board(){
   while(1); //busy wait for the reset
 }
 
+//The mega never uses the SPI interrupt, but I left this here in case we need it
 ISR(SPI_STC_vect){
   if(press_d_request || imu_request){
     uint8_t data = SPDR;
@@ -155,16 +159,16 @@ ISR(TIMER3_COMPA_vect){
 }
 
 void grab_press_data(){
-  pressRawD = (((uint16_t)buffer[1])<<8) + (uint16_t)(buffer[0]&0xff);
+  pressRawD = (((uint16_t)buffer[1])&0xff) + (uint16_t)(buffer[0]<<8);
   pressRawT = (uint16_t)analogRead(PRESS_T);
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
 }
 
 void transmitPressure(){
-  Serial.print("DP:");
+  Serial.print("~DP:");
   Serial.println(microPsi_D);
-  Serial.print("TP:");
+  Serial.print("~TP:");
   Serial.println(microPsi_T);
 }
 
@@ -180,17 +184,17 @@ void grab_IMU_data(){
 }
 
 void transmitIMU(){
-  Serial.print("AX:");
+  Serial.print("~AX:");
   Serial.println(accelRawXYZ[0]);
-  Serial.print("AY:");
+  Serial.print("~AY:");
   Serial.println(accelRawXYZ[1]);
-  Serial.print("AZ:");
+  Serial.print("~AZ:");
   Serial.println(accelRawXYZ[2]);
-  Serial.print("GX:");
+  Serial.print("~GX:");
   Serial.println(gyroRawXYZ[0]);
-  Serial.print("GY:");
+  Serial.print("~GY:");
   Serial.println(gyroRawXYZ[1]);
-  Serial.print("GZ:");
+  Serial.print("~GZ:");
   Serial.println(gyroRawXYZ[2]);
 }
 
@@ -239,107 +243,103 @@ void update_nano_freq(int freq){
   SPI.transfer((uint8_t)(0x30 + ((freq&0xf00)>>8)));
   uint8_t data = (uint8_t)SPDR;
   if(data != freq&0xff){
-    Serial.println("frequency update failed");
+    Serial.println("NANO:frequency update failed");
     delay(500);
+  }else{
+    Serial.print("NANO:frequency updated to ");
+    Serial.println(freq);
   }
   digitalWrite(CS_PIN, HIGH);
 }
 
 void serialControls(){
   if(Serial.available()){
-    char com = Serial.read();
-    if(com == '~'){
-      command_incoming = true;
-      command_index = 0;
+    size_t len = Serial.readBytesUntil('\n', command, SERIAL_BUFFER_SIZE-1);
+    if(command[0] != '~'){
+      return;
     }
-    if(command_incoming){
-      if(com == '\n'){
-        command_incoming = false;
-        command[command_index] = '\0';
-        command_ready = true;
-      }
-      else{
-        command[command_index] = com;
-        command_index++;
-      }
-    }
-    if(command_ready){
-      command_ready = false;
-      switch(command[0]){
-        case 'P': //change the frequency of the pressure sensor
-          int targetFreqP = atoi((char*)(command+1));
-          if(targetFreqP > 0 && targetFreqP < 1000){
-            setupPulse(3, targetFreqP);
-            update_nano_freq(targetFreqP);
-          }
-          else{
-            Serial.println("Invalid pressure target frequency");
-            delay(500);
-          }
-          break;
-        case 'E': //start/stop the test
-          if(test_running){
-            test_running = false;
-            Serial.println("Stopping test...");
-            delay(200);
-          }
-          else{
-            test_running = true;
-            Serial.println("Starting test...");
-            delay(200);
-          }
-          break;
-        case 'N': //change the target PSI
-          int targetPsi = atoi((char*)(command+1));
-          if(targetPsi > 0 && targetPsi < PSI_MAX){
-            updateSolenoids(targetPsi);
-          }
-          else{
-            Serial.println("Invalid target PSI");
-            delay(500);
-          }
-          break;
-        case 'I': //change the frequency of the IMU
-          int targetFreq = atoi((char*)(command+1));
-          if(targetFreq > 0 && targetFreq < 1000){
-            setupPulse(1, targetFreq);
-            update_nano_freq(targetFreq);
-          }
-          else{
-            Serial.println("Invalid IMU target frequency");
-            delay(500);
-          }
-          break;
-        case 'R': //reset the board
-          Serial.println("Resetting board...");
-          digitalWrite(CS_PIN, LOW);
-          SPI.transfer(SEND_RESET);
-          delay(10);
-          reset_board();
-          break;
-        default:
-          Serial.println("Invalid command");
-          break;
-        case 'S': //solenoid control
-          if(solenoid_control){
-            solenoid_control = false;
-            Serial.println("Stopping solenoid control...");
-            delay(200);
-          }
-          else{
-            solenoid_control = true;
-            Serial.println("Starting solenoid control...");
-            delay(200);
-          }
-          break;
-      }
+    //char com = Serial.read();
+    int value = atoi((char*)(command+2));
+    //Serial.print("MEGA:Received:");
+    //Serial.println(command);
+    switch(command[1]){
+      case 'P': //change the frequency of the pressure sensor
+        if(value > 0 && value < 1000){
+          setupPulse(3, value);
+          update_nano_freq(value);
+          Serial.print("MEGA:Updated pressure sample rate to ");
+          Serial.println(value);
+        }
+        else{
+          Serial.println("MEGA:Invalid pressure sample rate");
+          delay(500);
+        }
+        break;
+      case 'E': //start/stop the test
+        if(test_running){
+          test_running = false;
+          Serial.println("MEGA:Stopping test...");
+        }
+        else{
+          test_running = true;
+          Serial.println("MEGA:Starting test...");
+        }
+        break;
+      case 'N': //change the target PSI
+        if(value > 0 && value < PSI_MAX){
+          target_psi = value;
+          Serial.print("MEGA:Target PSI set to ");
+          Serial.println(target_psi);
+        }
+        else{
+          Serial.println("MEGA:Invalid target PSI");
+          delay(500);
+        }
+        break;
+      case 'I': //change the frequency of the IMU
+        if(value > 0 && value < 1000){
+          setupPulse(1, value);
+          update_nano_freq(value);
+          Serial.print("MEGA:IMU sample rate set to ");
+          Serial.println(value);
+        }
+        else{
+          Serial.println("MEGA:Invalid IMU sample rate");
+          delay(500);
+        }
+        break;
+      case 'R': //reset the board
+        Serial.println("MEGA:Resetting board...");
+        Serial.println("NANO:Resetting board...");
+        digitalWrite(CS_PIN, LOW);
+        SPI.transfer(SEND_RESET);
+        delay(10);
+        reset_board();
+        break;
+      case 'F': // just used in the console. NOP
+        break;
+      default:
+        Serial.println("MEGA:Invalid command");
+        break;
+      case 'S': //solenoid control
+        if(solenoid_control){
+          solenoid_control = false;
+          digitalWrite(SOL1, LOW);
+          digitalWrite(SOL2, LOW);
+          Serial.println("MEGA:Stopping solenoid control...");
+        }
+        else{
+          solenoid_control = true;
+          Serial.println("MEGA:Starting solenoid control...");
+        }
+        break;
     }
   }
   
 }
 
-void updateSolenoids(uint8_t psi_target){
-  uint32_t target_micro = psi_target*1000000;
+void updateSolenoids(){
+  uint32_t target_micro = target_psi*1000000;
   bool closeAtmospheric = false;
   bool closePressurized = false;
   if(target_micro < microPsi_D){
@@ -356,7 +356,7 @@ void loop() {
   if(test_running){
     manageSPI();
     if(solenoid_control){
-      updateSolenoids(TARGET_PSI);
+      updateSolenoids();
     }
   }
   serialControls();
