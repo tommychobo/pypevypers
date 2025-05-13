@@ -159,7 +159,7 @@ ISR(TIMER3_COMPA_vect){
 }
 
 void grab_press_data(){
-  pressRawD = (((uint16_t)buffer[1])&0xff) + (uint16_t)(buffer[0]<<8);
+  pressRawD = (((uint16_t)buffer[13])<<8) + (uint16_t)(buffer[12]&0xff);
   pressRawT = (uint16_t)analogRead(PRESS_T);
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
@@ -175,10 +175,10 @@ void transmitPressure(){
 void grab_IMU_data(){
   //Accel data is in cm/s^2, gyro data is in 16ths of degrees per second
   for(uint8_t i = 0; i < 3; i++){
-    accelRawXYZ[i] = (((uint16_t)buffer[(2*i)+1])<<8) + (uint16_t)buffer[2*i];
+    accelRawXYZ[i] = (((uint16_t)buffer[(2*i)])<<8) + (uint16_t)buffer[(2*i)+1];
   }
   for(uint8_t i = 0; i < 3; i++){
-    gyroRawXYZ[i] = (((uint16_t)buffer[(2*i)+7])<<8) + (uint16_t)buffer[(2*i)+6];
+    gyroRawXYZ[i] = (((uint16_t)buffer[(2*i)+6])<<8) + (uint16_t)buffer[(2*i)+7];
   }
   
 }
@@ -210,7 +210,7 @@ void manageSPI(){
     data = (uint8_t)SPDR;
     digitalWrite(CS_PIN, HIGH);
     if(bufferIndex != 0){
-      buffer[bufferIndex-1] = data;
+      buffer[bufferIndex+11] = data;
     }
     if(bufferIndex >= 3){
       grab_press_data();
