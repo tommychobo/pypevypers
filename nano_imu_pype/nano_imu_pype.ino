@@ -28,7 +28,7 @@ int8_t press_index = -1;
 int8_t imu_index = -1;
 volatile bool reset_ordered = false;
 volatile bool refresh_data = false;
-volatile uint8_t buffer[BUFFER_SIZE];
+uint8_t buffer[BUFFER_SIZE];
 volatile uint16_t timer_freq_buffer = 100;
 
 void setupSpiPeripheral() {

@@ -1,0 +1,10 @@
+1939 %10000 first test, May 13 2025 40 psi step, inflated lopsided
+
+2018 %10000 second test, 40 psi step, nearly 7 inches
+
+2289 %10000 third test, 30 psi step, 5 inches
+2401 pressure sensor turned off
+
+2443 %10000 4th test, 30 psi step,
+2497 soap water applied
+

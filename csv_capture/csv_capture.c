@@ -200,8 +200,8 @@ void push_to_console(wchar_t *wserial_buf) {
 
 void update_display(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %ld", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE: \t\t %7.2f", (double) buffer[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE: \t\t %7.2f", (double) buffer_conv[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer_conv[1]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
             (double) buffer_conv[2], (double) buffer_conv[3], (double)buffer_conv[4]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
