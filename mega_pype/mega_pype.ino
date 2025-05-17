@@ -133,14 +133,14 @@ void reset_board(){
 }
 
 //The mega never uses the SPI interrupt, but I left this here in case we need it
-ISR(SPI_STC_vect){
+/*ISR(SPI_STC_vect){
   if(press_d_request || imu_request){
     uint8_t data = SPDR;
     if(bufferIndex != 0){
       buffer[bufferIndex-1] = data;
     }
   }
-}
+}*/
 
 ISR(TIMER1_COMPA_vect){
   if(!press_d_request && !imu_request){
@@ -159,7 +159,6 @@ ISR(TIMER3_COMPA_vect){
 }
 
 void grab_press_data(){
-  pressRawD = (((uint16_t)buffer[13])<<8) + (uint16_t)(buffer[12]&0xff);
   pressRawT = (uint16_t)analogRead(PRESS_T);
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
@@ -206,18 +205,17 @@ void manageSPI(){
   }
   if(press_d_request){
     digitalWrite(CS_PIN, LOW);
-    SPI.transfer((uint8_t)(SEND_PRESSD + (bufferIndex&0x0f)));
-    data = (uint8_t)SPDR;
+    SPI.transfer((uint8_t)(SEND_PRESSD + 0));
+    uint16_t data = SPDR;//flush
+    SPI.transfer((uint8_t)(SEND_PRESSD + 1));
+    data |= (uint16_t)(SPDR&0xff)<<8;
+    SPI.transfer((uint8_t)(SEND_PRESSD + 1));
+    data = (uint16_t)SPDR&0xff;
     digitalWrite(CS_PIN, HIGH);
-    if(bufferIndex != 0){
-      buffer[bufferIndex+11] = data;
-    }
-    if(bufferIndex >= 3){
-      grab_press_data();
-      transmitPressure();
-      press_d_request = false;
-    }
-    bufferIndex++;
+    pressRawD = data;
+    grab_press_data();
+    transmitPressure();
+    press_d_request = false;
   }
   if(imu_request){
     digitalWrite(CS_PIN, LOW);
@@ -239,9 +237,12 @@ void manageSPI(){
 void update_nano_freq(int freq){
   digitalWrite(CS_PIN, LOW);
   SPI.transfer((uint8_t)(0x10 + (freq&0x00f)));
-  SPI.transfer((uint8_t)(0x20 + ((freq&0x0f0)>>4)));
-  SPI.transfer((uint8_t)(0x30 + ((freq&0xf00)>>8)));
   uint8_t data = (uint8_t)SPDR;
+  SPI.transfer((uint8_t)(0x20 + ((freq&0x0f0)>>4)));
+  data = (uint8_t)SPDR;
+  SPI.transfer((uint8_t)(0x30 + ((freq&0xf00)>>8)));
+  data |= (uint8_t)SPDR;
+  
   if(data != freq&0xff){
     Serial.println("NANO:frequency update failed");
     delay(500);

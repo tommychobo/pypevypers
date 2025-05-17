@@ -29,6 +29,7 @@ int8_t imu_index = -1;
 volatile bool reset_ordered = false;
 volatile bool refresh_data = false;
 uint8_t buffer[BUFFER_SIZE];
+uint16_t press_data;
 volatile uint16_t timer_freq_buffer = 100;
 
 void setupSpiPeripheral() {
@@ -78,7 +79,7 @@ ISR(SPI_STC_vect){
       }
       break;
     case 0x40:
-      SPDR = buffer[(data&0x0f)+12];
+      SPDR = (data&0xf == 1) ? (uint8_t)((press_data&0xff00) >> 8) : (uint8_t)(press_data&0xff);
       break;
     case 0x50:
       SPDR = buffer[data&0x0f];
@@ -163,7 +164,7 @@ void diagnostics(){
   Serial.println(buffer[8]<<8 + buffer[9]);
   Serial.println(buffer[10]<<8 + buffer[11]);
   Serial.println("Device Pressure:");
-  Serial.println(buffer[13]<<8 + buffer[12]);
+  Serial.println(press_data);
 }
 
 void loop() {
@@ -176,11 +177,8 @@ void loop() {
     // Read 6 bytes of accel + 6 bytes of gyro
     readLen(BNO055_ACC_DATA_X_LSB, buffer, 6);
     readLen(BNO055_GYR_DATA_X_LSB, buffer + 6, 6);
-    uint16_t press_data = (uint16_t)analogRead(PRESS_D_PIN);
+    press_data = (uint16_t)analogRead(PRESS_D_PIN);
     
-    
-    buffer[12] = (uint8_t)press_data&0xff;
-    buffer[13] = (uint8_t)((press_data&0xff00) >> 8);
     
     /* SPI transmit the buffer on Arduino Nano
       *  MISO: D12

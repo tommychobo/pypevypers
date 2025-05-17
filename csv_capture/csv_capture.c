@@ -209,6 +209,17 @@ void update_display(int serial_fd, uint64_t stamp){
     wrefresh(static_win);
 }
 
+void update_display_hex(int serial_fd, uint64_t stamp){
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %lx", stamp);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE: \t\t %7x", buffer[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x", buffer[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7x, %7x, %7x)", 
+            buffer[2], buffer[3],buffer[4]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "ANGULAR VELOCITY: \t\t (%7x, %7x, %7x)", 
+            buffer[5], buffer[6], buffer[7]);
+    wrefresh(static_win);
+}
+
 void handle_user_input() {
     wchar_t ch = wgetch(console_win);
     if (ch == ERR) {
