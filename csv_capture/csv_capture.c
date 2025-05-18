@@ -14,13 +14,13 @@
 #include <signal.h>
 
 #define SERIAL_BUF_SIZE 255
-#define PREFIX_COUNT 8
+#define PREFIX_COUNT 9
 #define SERIAL_PORT "/dev/ttyACM0"
 #define DISPLAY_RATE 10
 #define NUM_TERMINAL_LINES 6
 #define SENSOR_DISPLAY_OFFSET 7
 
-const char *prefixes[PREFIX_COUNT] = {"DP:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
+const char *prefixes[PREFIX_COUNT] = {"DP:", "2P:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
 
 const char *pypevypers[6] ={
     "╔════╗      ╔════╗     ╗     ╔       ╔════╗       ╔════╗ ╝╗╝╗╝╗╝",
@@ -129,11 +129,11 @@ uint64_t current_timestamp_ms() {
 
 void convert_buffer(){
     for(int i = 0; i < PREFIX_COUNT; i++){
-        if(i < 2){ /*Pressure*/
+        if(i < 3){ /*Pressure*/
             (buffer_conv[i]) = (float)((buffer[i])/1000000.0); /*psi*/
-        }else if(i < 5){ /*Acceleration*/
+        }else if(i < 6){ /*Acceleration*/
             (buffer_conv[i]) = (float)((buffer[i])/100.0); /*m/s/s*/
-        }else if(i < 8){ /*Angular Velocity*/
+        }else if(i < 9){ /*Angular Velocity*/
             (buffer_conv[i]) = (float)((buffer[i])/16.0); /*deg/s*/
         }
     }
@@ -200,25 +200,28 @@ void push_to_console(wchar_t *wserial_buf) {
 
 void update_display(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %ld", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE: \t\t %7.2f", (double) buffer_conv[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer_conv[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.2f", (double) buffer_conv[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.2f", (double) buffer_conv[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer_conv[2]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) buffer_conv[2], (double) buffer_conv[3], (double)buffer_conv[4]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) buffer_conv[5], (double) buffer_conv[6], (double) buffer_conv[7]);
+            (double) buffer_conv[3], (double) buffer_conv[4], (double)buffer_conv[5]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
+            (double) buffer_conv[6], (double) buffer_conv[7], (double) buffer_conv[8]);
     wrefresh(static_win);
 }
 
 void update_display_hex(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %lx", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE: \t\t %7x", buffer[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x", buffer[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7x, %7x, %7x)", 
-            buffer[2], buffer[3],buffer[4]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "ANGULAR VELOCITY: \t\t (%7x, %7x, %7x)", 
-            buffer[5], buffer[6], buffer[7]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.x", (double) buffer[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.x", (double) buffer[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.x, %7.x, %7.x)", 
+            (double) buffer[3], (double) buffer[4], (double)buffer[5]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.x, %7.x, %7.x)", 
+            (double) buffer[6], (double) buffer[7], (double) buffer[8]);
     wrefresh(static_win);
 }
+
 
 void handle_user_input() {
     wchar_t ch = wgetch(console_win);

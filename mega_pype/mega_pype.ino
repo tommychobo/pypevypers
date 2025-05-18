@@ -9,6 +9,7 @@
 #define SOL1      A0 // assumed atmospheric solenoid
 #define SOL2      A1 // assumed pressurized solenoid
 #define PRESS_T   A14
+#define PRESS_2   A13
 #define PSI_MAX   150
 
 #define SEND_PRESSD   0x40
@@ -37,9 +38,11 @@ volatile bool spi_first_byte = false;
 volatile int16_t accelRawXYZ[3];
 volatile int16_t gyroRawXYZ[3];
 volatile uint16_t pressRawD;
+volatile uint16_t pressRaw2;
 volatile uint16_t pressRawT;
 volatile int32_t microPsi_D;
 volatile int32_t microPsi_T;
+volatile int32_t microPsi_2;
 
 bool command_incoming = false;
 bool command_ready = false;
@@ -160,8 +163,10 @@ ISR(TIMER3_COMPA_vect){
 
 void grab_press_data(){
   pressRawT = (uint16_t)analogRead(PRESS_T);
+  pressRaw2 = (uint16_t)analogRead(PRESS_2);
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
+  microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
 }
 
 void transmitPressure(){
@@ -169,6 +174,8 @@ void transmitPressure(){
   Serial.println(microPsi_D);
   Serial.print("~TP:");
   Serial.println(microPsi_T);
+  Serial.print("~2P:");
+  Serial.println(microPsi_2);
 }
 
 void grab_IMU_data(){
@@ -343,10 +350,10 @@ void updateSolenoids(){
   uint32_t target_micro = target_psi*1000000;
   bool closeAtmospheric = false;
   bool closePressurized = false;
-  if(target_micro < microPsi_D){
+  if(target_micro < microPsi_2){
     closePressurized = true;
   }
-  if(target_micro+toleranceMicro > microPsi_D){
+  if(target_micro+toleranceMicro > microPsi_2){
     closeAtmospheric = true;
   }
   digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
