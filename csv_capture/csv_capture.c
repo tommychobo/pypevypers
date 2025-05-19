@@ -19,6 +19,7 @@
 #define DISPLAY_RATE 10
 #define NUM_TERMINAL_LINES 6
 #define SENSOR_DISPLAY_OFFSET 7
+#define MOVAV_SIZE 10
 
 const char *prefixes[PREFIX_COUNT] = {"DP:", "2P:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
 
@@ -59,8 +60,11 @@ WINDOW *static_win;
 
 int sample_rate = 25;
 int test_running = 0;
-int32_t buffer[PREFIX_COUNT] = {0};
-float buffer_conv[PREFIX_COUNT] = {0};
+int32_t mean_buffer[PREFIX_COUNT] = {0};
+float mean_buffer_conv[PREFIX_COUNT] = {0};
+int32_t movav_buffer[PREFIX_COUNT][MOVAV_SIZE] = {0};
+int movav_index[PREFIX_COUNT] = {0};
+
 char serial_buf[SERIAL_BUF_SIZE] = {0};
 wchar_t user_buf[SERIAL_BUF_SIZE] = {0};
 wchar_t console_buf[NUM_TERMINAL_LINES][SERIAL_BUF_SIZE] = {0};
@@ -79,6 +83,16 @@ FILE* csv_f = NULL;
     fclose(csv_f);
     exit(0);
 }*/
+
+//TODO: call this lil guy somewhere, will ya?
+int get_movav(int idx){
+    int sum = 0;
+    for(int i = 0; i < MOVAV_SIZE; i++){
+        sum += movav_buffer[idx][i];
+    }
+    mean_buffer[idx] = sum / MOVAV_SIZE;
+    return 0;
+}
 
 int index_from_prefix(const char *line) {
     for (int i = 0; i < PREFIX_COUNT; ++i) {
@@ -130,11 +144,11 @@ uint64_t current_timestamp_ms() {
 void convert_buffer(){
     for(int i = 0; i < PREFIX_COUNT; i++){
         if(i < 3){ /*Pressure*/
-            (buffer_conv[i]) = (float)((buffer[i])/1000000.0); /*psi*/
+            (mean_buffer_conv[i]) = (float)((mean_buffer[i])/1000000.0); /*psi*/
         }else if(i < 6){ /*Acceleration*/
-            (buffer_conv[i]) = (float)((buffer[i])/100.0); /*m/s/s*/
+            (mean_buffer_conv[i]) = (float)((mean_buffer[i])/100.0); /*m/s/s*/
         }else if(i < 9){ /*Angular Velocity*/
-            (buffer_conv[i]) = (float)((buffer[i])/16.0); /*deg/s*/
+            (mean_buffer_conv[i]) = (float)((mean_buffer[i])/16.0); /*deg/s*/
         }
     }
 }
@@ -200,25 +214,25 @@ void push_to_console(wchar_t *wserial_buf) {
 
 void update_display(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %ld", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.2f", (double) buffer_conv[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.2f", (double) buffer_conv[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) buffer_conv[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.2f", (double) mean_buffer_conv[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.2f", (double) mean_buffer_conv[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) mean_buffer_conv[2]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) buffer_conv[3], (double) buffer_conv[4], (double)buffer_conv[5]);
+            (double) mean_buffer_conv[3], (double) mean_buffer_conv[4], (double)mean_buffer_conv[5]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) buffer_conv[6], (double) buffer_conv[7], (double) buffer_conv[8]);
+            (double) mean_buffer_conv[6], (double) mean_buffer_conv[7], (double) mean_buffer_conv[8]);
     wrefresh(static_win);
 }
 
 void update_display_hex(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %lx", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.x",  buffer[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.x",  buffer[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x",  buffer[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.x",  mean_buffer[0]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.x",  mean_buffer[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x",  mean_buffer[2]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.x, %7.x, %7.x)", 
-             buffer[3],  buffer[4], buffer[5]);
+             mean_buffer[3],  mean_buffer[4], mean_buffer[5]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.x, %7.x, %7.x)", 
-             buffer[6],  buffer[7],  buffer[8]);
+             mean_buffer[6],  mean_buffer[7],  mean_buffer[8]);
     wrefresh(static_win);
 }
 
@@ -328,7 +342,8 @@ int main(int argc, char *argv[]) {
             
                 if (idx != -1) {
                     int val = strtol((serial_buf+4), NULL, 10);
-                    buffer[idx] = val;
+                    movav_buffer[idx][movav_index[idx]] = val;
+                    movav_index[idx] = (movav_index[idx] + 1) % MOVAV_SIZE;
                     //mvprintw(10, 0, "index %d", idx);
                 }    
             }
@@ -349,7 +364,8 @@ int main(int argc, char *argv[]) {
         if (now - last_write >= (1000/sample_rate) && test_running) {
             fprintf(csv_f, "%ld", now); // time(NULL) is unix seconds
             for (int i = 0; i < PREFIX_COUNT; ++i) {
-                fprintf(csv_f, ",%d", buffer[i]);
+                get_movav(i);
+                fprintf(csv_f, ",%d", mean_buffer[i]);
             }
             fprintf(csv_f, "\n");
             fflush(csv_f);
