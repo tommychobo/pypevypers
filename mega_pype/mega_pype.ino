@@ -369,10 +369,10 @@ void updateSolenoids(){
   uint32_t target_micro = target_psi*1000000;
   bool closeAtmospheric = false;
   bool closePressurized = false;
-  if(target_micro < microPsi_2){
+  if(target_micro < microPsi_T){
     closePressurized = true;
   }
-  if(target_micro+toleranceMicro > microPsi_2){
+  if(target_micro+toleranceMicro > microPsi_T){
     closeAtmospheric = true;
   }
   digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
