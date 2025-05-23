@@ -24,9 +24,12 @@
 
 const uint32_t toleranceMicro = 1000000;
 
+
+// values controllable by the console
 int target_psi = 15;
 int sample_rate_imu = 100;
 int sample_rate_press = 30;
+int sample_rate_solenoid = 10;
 
 
 volatile uint8_t buffer[BUFFER_SIZE];
@@ -34,6 +37,7 @@ volatile uint8_t bufferIndex = 0;
 volatile bool press_d_request = false;
 volatile bool imu_request = false;
 volatile bool spi_first_byte = false;
+volatile bool sol_update_ready = false;
 
 volatile int16_t accelRawXYZ[3];
 volatile int16_t gyroRawXYZ[3];
@@ -61,7 +65,7 @@ char command[SERIAL_BUFFER_SIZE];
  * 53 - white - CS
  */
 
-
+// wrap all MEGA timer setups in this function
 void setupPulse(int num, int freq){
   uint32_t top;
   const uint32_t F_CPU_HZ = 16000000UL;
@@ -161,6 +165,12 @@ ISR(TIMER3_COMPA_vect){
   }
 }
 
+ISR(TIMER5_COMPA_vect){
+  if(!sol_update_ready){
+    sol_update_ready = true;
+  }
+}
+
 void grab_press_data(){
   pressRawT = (uint16_t)analogRead(PRESS_T);
   pressRaw2 = (uint16_t)analogRead(PRESS_2);
@@ -204,6 +214,7 @@ void transmitIMU(){
   Serial.println(gyroRawXYZ[2]);
 }
 
+// communicate with the NANO over SPI
 void manageSPI(){
   uint8_t data;
   if(spi_first_byte){  
@@ -252,7 +263,7 @@ void update_nano_freq(int freq){
   
   if(data != freq&0xff){
     Serial.println("NANO:frequency update failed");
-    delay(500);
+    delay(100);
   }else{
     Serial.print("NANO:frequency updated to ");
     Serial.println(freq);
@@ -260,6 +271,7 @@ void update_nano_freq(int freq){
   digitalWrite(CS_PIN, HIGH);
 }
 
+// big important control function for the mega
 void serialControls(){
   if(Serial.available()){
     size_t len = Serial.readBytesUntil('\n', command, SERIAL_BUFFER_SIZE-1);
@@ -280,7 +292,7 @@ void serialControls(){
         }
         else{
           Serial.println("MEGA:Invalid pressure sample rate");
-          delay(500);
+          delay(100);
         }
         break;
       case 'E': //start/stop the test
@@ -326,9 +338,6 @@ void serialControls(){
         break;
       case 'F': // just used in the console. NOP
         break;
-      default:
-        Serial.println("MEGA:Invalid command");
-        break;
       case 'S': //solenoid control
         if(solenoid_control){
           solenoid_control = false;
@@ -337,10 +346,20 @@ void serialControls(){
           Serial.println("MEGA:Stopping solenoid control...");
         }
         else{
-          solenoid_control = true;
-          Serial.println("MEGA:Starting solenoid control...");
+          if(value <= 0 || value > 100){
+            Serial.println("MEGA:Invalid solenoid duty cycle: specify frequency in Hz");
+            delay(100);
+          }else{
+            solenoid_control = true;
+            Serial.println("MEGA:Starting solenoid control...");
+            setupPulse(5, value);
+          }
         }
         break;
+      default:
+        Serial.println("MEGA:Invalid command");
+        break;
+      
     }
   }
   
@@ -358,12 +377,15 @@ void updateSolenoids(){
   }
   digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
   digitalWrite(SOL2, closePressurized ? HIGH : LOW);
+  sol_update_ready = false;
 }
 
 void loop() {
   if(test_running){
     manageSPI();
-    if(solenoid_control){
+    // solenoid_control updated by serialControls(), 
+    //sol_update_ready is set by the timer interrupt
+    if(solenoid_control && sol_update_ready){
       updateSolenoids();
     }
   }

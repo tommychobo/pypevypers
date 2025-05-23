@@ -13,7 +13,7 @@
 #include <wchar.h>
 #include <signal.h>
 
-#define SERIAL_BUF_SIZE 255
+#define SERIAL_BUF_SIZE 255         
 #define PREFIX_COUNT 9
 #define SERIAL_PORT "/dev/ttyACM0"
 #define DISPLAY_RATE 10
@@ -58,7 +58,7 @@ KEY
 WINDOW *console_win;
 WINDOW *static_win;
 
-int sample_rate = 25;
+int sample_rate = 25; // default sampling frequency
 int test_running = 0;
 int32_t mean_buffer[PREFIX_COUNT] = {0};
 float mean_buffer_conv[PREFIX_COUNT] = {0};
@@ -84,7 +84,8 @@ FILE* csv_f = NULL;
     exit(0);
 }*/
 
-//TODO: call this lil guy somewhere, will ya?
+// computes the moving average of movav_buffer for prefix idx, 
+// stores in mean_buffer[idx]
 int get_movav(int idx){
     int sum = 0;
     for(int i = 0; i < MOVAV_SIZE; i++){
@@ -94,6 +95,7 @@ int get_movav(int idx){
     return 0;
 }
 
+// determines the prefix index based on the first 3 characters of the line
 int index_from_prefix(const char *line) {
     for (int i = 0; i < PREFIX_COUNT; ++i) {
         if (strncmp(line, prefixes[i], 3) == 0) {
@@ -141,6 +143,7 @@ uint64_t current_timestamp_ms() {
     return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
+// get useful units from the raw data
 void convert_buffer(){
     for(int i = 0; i < PREFIX_COUNT; i++){
         if(i < 3){ /*Pressure*/
@@ -250,9 +253,10 @@ void handle_user_input() {
         
         push_to_console(user_buf);
         if(user_buf[0]== L'~'){
-            // Send command
+            // Send command to NANO and MEGA:
             write(serial_fd, output_buf, user_line_len + 1);
             //push_to_console(get_wchars(output_buf+1));
+            // handle command on this side
             if(output_buf[1] == 'F'){
                 char* user_string = malloc(SERIAL_BUF_SIZE);
                 wcstombs(user_string, user_buf+2, SERIAL_BUF_SIZE);
@@ -339,7 +343,7 @@ int main(int argc, char *argv[]) {
             serial_buf[serial_buf_len] = '\0';
             if(serial_buf[0] == '~'){
                 int idx = index_from_prefix(serial_buf+1);
-            
+                // store a measurement from the MEGA in the movav_buffer
                 if (idx != -1) {
                     int val = strtol((serial_buf+4), NULL, 10);
                     movav_buffer[idx][movav_index[idx]] = val;
@@ -362,6 +366,7 @@ int main(int argc, char *argv[]) {
         //mvprintw(11, 0, "line: %s", line);
         uint64_t now = current_timestamp_ms();
         if (now - last_write >= (1000/sample_rate) && test_running) {
+            // compute moving average, store in the csv file
             fprintf(csv_f, "%ld", now); // time(NULL) is unix seconds
             for (int i = 0; i < PREFIX_COUNT; ++i) {
                 get_movav(i);
@@ -372,6 +377,7 @@ int main(int argc, char *argv[]) {
             last_write = now;
         }
         if(now - last_display >= (1000/DISPLAY_RATE)){
+            // convert the raw data to useful units, send to display
             convert_buffer();
             update_display(serial_fd, now);
         }
