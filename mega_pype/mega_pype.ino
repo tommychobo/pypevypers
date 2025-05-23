@@ -10,6 +10,7 @@
 #define SOL2      A1 // assumed pressurized solenoid
 #define PRESS_T   A14
 #define PRESS_2   A13
+#define PRESS_B  A11
 #define PSI_MAX   150
 #define PSI_MAX_2  30
 
@@ -43,9 +44,11 @@ volatile bool sol_update_ready = false;
 volatile int16_t accelRawXYZ[3];
 volatile int16_t gyroRawXYZ[3];
 volatile uint16_t pressRawD;
+volatile uint16_t pressRawB;
 volatile uint16_t pressRaw2;
 volatile uint16_t pressRawT;
 volatile int32_t microPsi_D;
+volatile int32_t microPsi_B;
 volatile int32_t microPsi_T;
 volatile int32_t microPsi_2;
 
@@ -175,8 +178,10 @@ ISR(TIMER5_COMPA_vect){
 void grab_press_data(){
   pressRawT = (uint16_t)analogRead(PRESS_T);
   pressRaw2 = (uint16_t)analogRead(PRESS_2);
+  pressRawB = (uint16_t)analogRead(PRESS_B);
   // the pressure sensor in the device is 30 psi max, and inverted so we need to read it as negative
-  microPsi_D = -1 *(int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX_2/4);
+  microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
+  microPsi_B = -1 *(int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
 }
@@ -188,6 +193,8 @@ void transmitPressure(){
   Serial.println(microPsi_T);
   Serial.print("~2P:");
   Serial.println(microPsi_2);
+  Serial.print("~BP:");
+  Serial.println(microPsi_B);
 }
 
 void grab_IMU_data(){

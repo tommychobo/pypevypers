@@ -14,14 +14,14 @@
 #include <signal.h>
 
 #define SERIAL_BUF_SIZE 255         
-#define PREFIX_COUNT 9
+#define PREFIX_COUNT 10
 #define SERIAL_PORT "/dev/ttyACM0"
 #define DISPLAY_RATE 10
 #define NUM_TERMINAL_LINES 6
 #define SENSOR_DISPLAY_OFFSET 7
 #define MOVAV_SIZE 10
 
-const char *prefixes[PREFIX_COUNT] = {"DP:", "2P:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
+const char *prefixes[PREFIX_COUNT] = {"DP:", "BP:", "2P:", "TP:", "AX:", "AY:", "AZ:", "GX:", "GY:", "GZ:"};
 
 const char *pypevypers[6] ={
     "╔════╗      ╔════╗     ╗     ╔       ╔════╗       ╔════╗ ╝╗╝╗╝╗╝",
@@ -51,7 +51,7 @@ KEY
 ~F### = Set data capture rate
 ~N### = Set target PSI
 ~I### = Set IMU frequency
-~S    = Start/Stop solenoid control
+~S### = Start/Stop solenoid control, give frequency when toggle on
 ~D    = Set solenoid duty cycle (NOT IMPLEMENTED)
 */
 
@@ -60,6 +60,11 @@ WINDOW *static_win;
 
 int sample_rate = 25; // default sampling frequency
 int test_running = 0;
+int sols_running = 0;
+int solenoid_rate = 0;
+int pressure_rate = 0;
+int imu_rate = 0;
+int target_psi = 0;
 int32_t mean_buffer[PREFIX_COUNT] = {0};
 float mean_buffer_conv[PREFIX_COUNT] = {0};
 int32_t movav_buffer[PREFIX_COUNT][MOVAV_SIZE] = {0};
@@ -146,11 +151,11 @@ uint64_t current_timestamp_ms() {
 // get useful units from the raw data
 void convert_buffer(){
     for(int i = 0; i < PREFIX_COUNT; i++){
-        if(i < 3){ /*Pressure*/
+        if(i < 4){ /*Pressure*/
             (mean_buffer_conv[i]) = (float)((mean_buffer[i])/1000000.0); /*psi*/
-        }else if(i < 6){ /*Acceleration*/
+        }else if(i < 7){ /*Acceleration*/
             (mean_buffer_conv[i]) = (float)((mean_buffer[i])/100.0); /*m/s/s*/
-        }else if(i < 9){ /*Angular Velocity*/
+        }else if(i < 10){ /*Angular Velocity*/
             (mean_buffer_conv[i]) = (float)((mean_buffer[i])/16.0); /*deg/s*/
         }
     }
@@ -217,25 +222,31 @@ void push_to_console(wchar_t *wserial_buf) {
 
 void update_display(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %ld", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.2f", (double) mean_buffer_conv[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.2f", (double) mean_buffer_conv[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) mean_buffer_conv[2]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) mean_buffer_conv[3], (double) mean_buffer_conv[4], (double)mean_buffer_conv[5]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
-            (double) mean_buffer_conv[6], (double) mean_buffer_conv[7], (double) mean_buffer_conv[8]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE INSIDE: \t\t %7.2f", (double) mean_buffer_conv[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE OUTSIDE: \t\t %7.2f", (double) mean_buffer_conv[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) mean_buffer_conv[3]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+5, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
+            (double) mean_buffer_conv[4], (double) mean_buffer_conv[5], (double)mean_buffer_conv[6]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ANGULAR VELOCITY: \t\t (%7.2f, %7.2f, %7.2f)", 
+            (double) mean_buffer_conv[7], (double) mean_buffer_conv[8], (double) mean_buffer_conv[9]);
+    char* solenoid_status = (sols_running) ? "ON" : "OFF";
+    char* test_status = (test_running) ? "ON" : "OFF";
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "f(P):%4d\t f(I):%4d\t target P:%4d\t", 
+        pressure_rate, imu_rate, target_psi);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+9, 4, "f(data):%4d %s\t f(sol):%4d %s\t", 
+        sample_rate, test_status, solenoid_rate, solenoid_status);
     wrefresh(static_win);
 }
 
 void update_display_hex(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %lx", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE 1: \t\t %7.x",  mean_buffer[0]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE 2: \t\t %7.x",  mean_buffer[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x",  mean_buffer[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE INSIDE: \t\t %7.x",  mean_buffer[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE OUTSIDE: \t\t %7.x",  mean_buffer[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7x",  mean_buffer[3]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+6, 4, "ACCELERATION: \t\t (%7.x, %7.x, %7.x)", 
-             mean_buffer[3],  mean_buffer[4], mean_buffer[5]);
+             mean_buffer[4],  mean_buffer[5], mean_buffer[6]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+7, 4, "ANGULAR VELOCITY: \t\t (%7.x, %7.x, %7.x)", 
-             mean_buffer[6],  mean_buffer[7],  mean_buffer[8]);
+             mean_buffer[7],  mean_buffer[8],  mean_buffer[9]);
     wrefresh(static_win);
 }
 
@@ -257,29 +268,70 @@ void handle_user_input() {
             write(serial_fd, output_buf, user_line_len + 1);
             //push_to_console(get_wchars(output_buf+1));
             // handle command on this side
-            if(output_buf[1] == 'F'){
-                char* user_string = malloc(SERIAL_BUF_SIZE);
-                wcstombs(user_string, user_buf+2, SERIAL_BUF_SIZE);
-                int freq = strtol(user_string, NULL, 10);
-                free(user_string);
-                if(freq > 0 && freq < 1000){
-                    sample_rate = freq;
-                    push_to_console(L"TTY:Data capture rate set");
-                }else{
-                    push_to_console(L"TTY:Invalid csv file data capture rate");
-                }
-            }else if(user_buf[1] == L'R'){
-                sample_rate = 25;
-                test_running = 0;
-                push_to_console(L"TTY:Test stopped, reset all peripherals");
-            }else if(user_buf[1] == L'E'){
-                if(test_running){
+            char* user_string = malloc(SERIAL_BUF_SIZE);
+            wcstombs(user_string, user_buf+2, SERIAL_BUF_SIZE);
+            int val = strtol(user_string, NULL, 10);
+            free(user_string);
+            switch(output_buf[1]){
+                case 'P': //change the frequency of the pressure sensor
+                    if(val > 0 && val < 1000){
+                        pressure_rate = val;
+                        push_to_console(L"TTY:Pressure sample rate set");
+                    }else{
+                        push_to_console(L"TTY:Invalid pressure sample rate");
+                    }
+                    break;
+                case 'I': //change the frequency of the IMU
+                    if(val > 0 && val < 1000){
+                        imu_rate = val;
+                        push_to_console(L"TTY:IMU sample rate set");
+                    }else{
+                        push_to_console(L"TTY:Invalid IMU sample rate");
+                    }
+                    break;
+                case 'S': //solenoid control
+                    if(!sols_running && val > 0 && val < 100){
+                        solenoid_rate = val;
+                        sols_running = 1;
+                        push_to_console(L"TTY:Solenoid control started");
+                    }else if(sols_running){
+                        sols_running = 0;
+                        push_to_console(L"TTY:Solenoid control stopped");
+                    }else{
+                        push_to_console(L"TTY:Invalid solenoid duty cycle");
+                    }
+                    break;
+                case 'N': //change the target PSI
+                    if(val > 0 && val < 150){
+                        target_psi = val;
+                        push_to_console(L"TTY:Target PSI set");
+                    }else{
+                        push_to_console(L"TTY:Invalid target PSI");
+                    }
+                    break;
+                case 'E': //start/stop the test
+                    if(test_running){
+                        test_running = 0;
+                        push_to_console(L"TTY:Test stopped");
+                    }else{
+                        test_running = 1;
+                        push_to_console(L"TTY:Test started");
+                    }
+                    break;
+                case 'R': //reset the board
                     test_running = 0;
-                    push_to_console(L"TTY:Test stopped");
-                }else{
-                    test_running = 1;
-                    push_to_console(L"TTY:Test started");
-                }
+                    push_to_console(L"TTY:Resetting board...");
+                    break;
+                case 'F': //change the frequency of the data capture
+                    if(val > 0 && val < 1000){
+                        sample_rate = val;
+                        push_to_console(L"TTY:Data capture rate set");
+                    }else{
+                        push_to_console(L"TTY:Invalid data capture rate");
+                    }
+                    break;
+                default:
+                    break;
             }
         }
         user_line_len = 0; // reset buffer
