@@ -11,6 +11,7 @@
 #define PRESS_T   A14
 #define PRESS_2   A13
 #define PSI_MAX   150
+#define PSI_MAX_2  30
 
 #define SEND_PRESSD   0x40
 #define SEND_IMU      0x50
@@ -174,7 +175,8 @@ ISR(TIMER5_COMPA_vect){
 void grab_press_data(){
   pressRawT = (uint16_t)analogRead(PRESS_T);
   pressRaw2 = (uint16_t)analogRead(PRESS_2);
-  microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
+  // the pressure sensor in the device is 30 psi max, and inverted so we need to read it as negative
+  microPsi_D = -1 *(int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
 }
