@@ -120,6 +120,8 @@ void setup() {
   pinMode(SOL1, OUTPUT);
   pinMode(SOL2, OUTPUT);
   pinMode(PRESS_T, INPUT);
+  pinMode(PRESS_2, INPUT);
+  pinMode(PRESS_B, INPUT);
   digitalWrite(SOL1, LOW);
   digitalWrite(SOL2, LOW);
 

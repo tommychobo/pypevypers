@@ -222,8 +222,8 @@ void push_to_console(wchar_t *wserial_buf) {
 
 void update_display(int serial_fd, uint64_t stamp){
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+0, 4, "TIME: \t\t\t %ld", stamp);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE INSIDE: \t\t %7.2f", (double) mean_buffer_conv[1]);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE OUTSIDE: \t\t %7.2f", (double) mean_buffer_conv[2]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+2, 4, "DEVICE PRESSURE INSIDE: \t %7.2f", (double) mean_buffer_conv[1]);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+3, 4, "DEVICE PRESSURE OUTSIDE: \t %7.2f", (double) mean_buffer_conv[2]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+4, 4, "INTERSECTION PRESSURE: \t %7.2f", (double) mean_buffer_conv[3]);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+5, 4, "ACCELERATION: \t\t (%7.2f, %7.2f, %7.2f)", 
             (double) mean_buffer_conv[4], (double) mean_buffer_conv[5], (double)mean_buffer_conv[6]);
@@ -231,9 +231,9 @@ void update_display(int serial_fd, uint64_t stamp){
             (double) mean_buffer_conv[7], (double) mean_buffer_conv[8], (double) mean_buffer_conv[9]);
     char* solenoid_status = (sols_running) ? "ON" : "OFF";
     char* test_status = (test_running) ? "ON" : "OFF";
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "f(P):%4d\t f(I):%4d\t target P:%4d\t", 
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "[P]f(P):%4d\t\t [I]f(I):%4d\t [N]target P:%4d\t", 
         pressure_rate, imu_rate, target_psi);
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+9, 4, "f(data):%4d %s\t f(sol):%4d %s\t", 
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+9, 4, "[F]f(data):%4d %s\t\t [S]f(sol):%4d %s\t", 
         sample_rate, test_status, solenoid_rate, solenoid_status);
     wrefresh(static_win);
 }
