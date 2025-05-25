@@ -11,4 +11,11 @@ Lead software engineer: Thomas Choboter
 
 How to use this software suite:
 
-This 
+This program interfaces with the code on
+the Arduino Mega inside the housing of our system through a serial device,
+Which is by default the device at /dev/ttyACM0. This is the port that 
+the Arduino Mega chooses by default, so no extra configuration should be 
+needed unless the port is already in use. If this is the case, change
+the SERIAL_PORT variable to the new device. Try searching for the device
+using "sudo dmesg | grep tty"
+

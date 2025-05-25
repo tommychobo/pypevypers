@@ -205,6 +205,10 @@ wchar_t* get_wchars(const char *str) {
 
 void push_to_console(wchar_t *wserial_buf) {
     // Push the new line to the console buffer
+    if(wcslen(wserial_buf) == 0 || wserial_buf[0] == L'\n' || wserial_buf[0] == L'\r') {
+        wserial_buf[0] = L'\0'; // Clear the buffer if it's empty
+        return; // Ignore empty lines
+    }
     wcsncpy((wchar_t*)console_buf[console_buf_top], wserial_buf, SERIAL_BUF_SIZE);
     console_buf_top = (console_buf_top + 1) % NUM_TERMINAL_LINES;
     // Clear the console window
@@ -266,8 +270,7 @@ void handle_user_input() {
         
         push_to_console(user_buf);
         if(user_buf[0]== L'~'){
-            // Send command to NANO and MEGA:
-            write(serial_fd, output_buf, user_line_len + 1);
+            
             //push_to_console(get_wchars(output_buf+1));
             // handle command on this side
             char* user_string = malloc(SERIAL_BUF_SIZE);
@@ -344,6 +347,10 @@ void handle_user_input() {
                 default:
                     break;
             }
+            // Send command to NANO and MEGA:
+            if(output_buf[1] != 'D' && output_buf[1] != 'F'){ // D command is not sent to the MEGA
+                write(serial_fd, output_buf, user_line_len + 1);
+            }
         }
         user_line_len = 0; // reset buffer
         user_buf[0] = L'\0'; // reset buffer
@@ -359,6 +366,7 @@ void handle_user_input() {
 
     // Re-draw the input line
     int max_y = getmaxy(console_win);
+    
     mvwprintw(console_win, max_y - 1, 2, "> %ls", user_buf);
     wclrtoeol(console_win);
     wrefresh(console_win);

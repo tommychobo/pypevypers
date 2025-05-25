@@ -183,7 +183,7 @@ void grab_press_data(){
   pressRawB = (uint16_t)analogRead(PRESS_B);
   // the pressure sensor in the device is 30 psi max, and inverted so we need to read it as negative
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
-  microPsi_B = -1 *(int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
+  microPsi_B = (int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
 }
@@ -348,6 +348,7 @@ void serialControls(){
         reset_board();
         break;
       case 'F': // just used in the console. NOP
+      case 'D': //store the diameter of the device in the csv file. NOP on the MEGA
         break;
       case 'S': //solenoid control
         if(solenoid_control){
