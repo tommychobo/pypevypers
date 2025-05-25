@@ -52,7 +52,7 @@ KEY
 ~N### = Set target PSI
 ~I### = Set IMU frequency
 ~S### = Start/Stop solenoid control, give frequency when toggle on
-~D    = Set solenoid duty cycle (NOT IMPLEMENTED)
+~D### = Store the diameter of the device, in tenths of an inch, in the csv file.
 */
 
 WINDOW *console_win;
@@ -65,6 +65,8 @@ int solenoid_rate = 0;
 int pressure_rate = 0;
 int imu_rate = 0;
 int target_psi = 0;
+int diam_measure = 0; // used to store the diameter measurement manually with ~D###
+// used to store the mean of the last MOVAV_SIZE measurements for each prefix
 int32_t mean_buffer[PREFIX_COUNT] = {0};
 float mean_buffer_conv[PREFIX_COUNT] = {0};
 int32_t movav_buffer[PREFIX_COUNT][MOVAV_SIZE] = {0};
@@ -330,6 +332,15 @@ void handle_user_input() {
                         push_to_console(L"TTY:Invalid data capture rate");
                     }
                     break;
+                case 'D': // store the specified value in the last column of the csv file
+                    if(val >= 0 && val <= 2000){
+                        // store the value in the last column of the csv file
+                        diam_measure = val;
+                        push_to_console(L"TTY:Value stored in csv file");
+                    }else{
+                        push_to_console(L"TTY:Invalid value for D command");
+                    }
+                    break;
                 default:
                     break;
             }
@@ -423,6 +434,10 @@ int main(int argc, char *argv[]) {
             for (int i = 0; i < PREFIX_COUNT; ++i) {
                 get_movav(i);
                 fprintf(csv_f, ",%d", mean_buffer[i]);
+            }
+            fprintf(csv_f, ",%d", diam_measure);
+            if(diam_measure > 0){
+                diam_measure = 0; // reset the diameter measurement after writing it
             }
             fprintf(csv_f, "\n");
             fflush(csv_f);

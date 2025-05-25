@@ -1,4 +1,4 @@
-.PHONY: clean
+.PHONY: clean store
 
 CC = gcc
 
@@ -11,4 +11,6 @@ csv: csv_capture.c
 clean:
 	rm ./*.csv
 
+store:
+	mv ./*.csv ../csvs
 
