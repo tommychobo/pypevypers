@@ -19,3 +19,8 @@ needed unless the port is already in use. If this is the case, change
 the SERIAL_PORT variable to the new device. Try searching for the device
 using "sudo dmesg | grep tty"
 
+When the terminal is started, there are two sections the user will see:
+1. The sensor display and settings section
+ - This section displays the current sensor readings and allows the user to
+   change settings such as the sampling rate, the number of samples to take,
+   and the type of data to capture.
