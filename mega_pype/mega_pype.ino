@@ -6,13 +6,14 @@
 
 
 
-#define SOL1      A0 // assumed atmospheric solenoid
-#define SOL2      A1 // assumed pressurized solenoid
+#define SOL1      A1 // assumed atmospheric solenoid
+#define SOL2      A0 // assumed pressurized solenoid
 #define PRESS_T   A14
 #define PRESS_2   A13
 #define PRESS_B  A11
 #define PSI_MAX   150
 #define PSI_MAX_2  30
+#define MOVAV_SIZE  10
 
 #define SEND_PRESSD   0x40
 #define SEND_IMU      0x50
@@ -24,14 +25,14 @@
 #define SERIAL_BUFFER_SIZE 32
 #define CS_PIN        53
 
-const uint32_t toleranceMicro = 1000000;
+const uint32_t toleranceMicro = 100000;
 
 
 // values controllable by the console
-int target_psi = 15;
-int sample_rate_imu = 100;
-int sample_rate_press = 30;
-int sample_rate_solenoid = 10;
+volatile int target_psi = 15;
+volatile int sample_rate_imu = 100;
+volatile int sample_rate_press = 30;
+volatile int sample_rate_solenoid = 10;
 
 
 volatile uint8_t buffer[BUFFER_SIZE];
@@ -52,6 +53,11 @@ volatile int32_t microPsi_B;
 volatile int32_t microPsi_T;
 volatile int32_t microPsi_2;
 
+int32_t micro_diff = 0; // difference between the current pressure and the target pressure
+
+int32_t movav_mPT[MOVAV_SIZE];
+int32_t movav_index = 0;
+
 bool command_incoming = false;
 bool command_ready = false;
 bool test_running = false;
@@ -68,6 +74,19 @@ char command[SERIAL_BUFFER_SIZE];
  * A14 - press_t_pin
  * 53 - white - CS
  */
+
+int32_t update_movav(int32_t value){
+  movav_mPT[movav_index] = value;
+  movav_index++;
+  if(movav_index >= MOVAV_SIZE){
+    movav_index = 0;
+  }
+  int32_t sum = 0;
+  for(uint8_t i = 0; i < MOVAV_SIZE; i++){
+    sum += movav_mPT[i];
+  }
+  return sum/MOVAV_SIZE;
+}
 
 // wrap all MEGA timer setups in this function
 void setupPulse(int num, int freq){
@@ -185,7 +204,8 @@ void grab_press_data(){
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_B = (int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
-  microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
+  //microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
+  microPsi_2 = micro_diff;
 }
 
 void transmitPressure(){
@@ -378,18 +398,35 @@ void serialControls(){
 }
 
 void updateSolenoids(){
-  uint32_t target_micro = target_psi*1000000;
+  int32_t target_micro = (int32_t)target_psi*1000000;
   bool closeAtmospheric = false;
   bool closePressurized = false;
-  if(target_micro < microPsi_T){
+  micro_diff = update_movav(microPsi_B) - target_micro;
+  if(micro_diff > -1* toleranceMicro && micro_diff < toleranceMicro){
+    digitalWrite(SOL1, HIGH); // close atmospheric solenoid
+    digitalWrite(SOL2, HIGH); // close pressurized solenoid
+  }
+  else if(micro_diff > 0){
+    digitalWrite(SOL1, LOW); // open atmospheric solenoid
+    digitalWrite(SOL2, HIGH); // close pressurized solenoid
+  }
+  else if(micro_diff < 0){
+    digitalWrite(SOL1, HIGH); // close atmospheric solenoid
+    digitalWrite(SOL2, LOW); // open pressurized solenoid
+  }
+  else{
+    digitalWrite(SOL1, LOW); // open atmospheric solenoid
+    digitalWrite(SOL2, LOW); // open pressurized solenoid
+  }
+  /*if(micro_diff > -1*toleranceMicro){
     closePressurized = true;
   }
-  if(target_micro+toleranceMicro > microPsi_T){
+  if(micro_diff < toleranceMicro){
     closeAtmospheric = true;
   }
   digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
   digitalWrite(SOL2, closePressurized ? HIGH : LOW);
-  sol_update_ready = false;
+  sol_update_ready = false;*/
 }
 
 void loop() {
