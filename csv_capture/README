@@ -1,4 +1,12 @@
-This is the final project code for 
+This is the final program for operating the NAVFAC Pipe Viper.
+; It is a software suite for controlling the device and capturing data from it.
+; It is written in C and is paired with arduino code for two microcontrollers on the system.
+; It is designed to be run on a Linux OS, and has been tested on Ubuntu 24.04 LTS.
+; It is a terminal-based program that uses the ncurses library for user interface.
+; I don't know if NAVFAC uses linux, but this program has 
+;also been tested on Linux running on a virtual machine in Windows 11.
+; This program COULD be run on a Raspberry Pi. Just sayin'.
+
 
 ╔════╗      ╔════╗     ╗T H E╔       ╔════╗       ╔════╗ ╝╗╝╗╝╗╝
 ║░   ╚╣    ║║░   ╚╦════╩╗   ╔╝╚╣    ║║░   ╚╦════  ║░   ╚║╗
@@ -7,11 +15,14 @@ This is the final project code for
 ║░    ▐╠╗  ║║░    ║░     ╚╦╝   ▐╠╗  ║║░    ║░     ║░   ╚╗    ╔╝
 ║░Chobot╚══╝║░erDu╚═══════╬ttaMao╚══╝║░Rour╚══════╣░ke ●╬════╝
 
-Lead software engineer: Thomas Choboter
+Lead computer engineer:               Thomas Choboter
+Lead mechanical/biomedical engineer:  Ritvik Dutta
+Lead electrical engineer:             Jason  Mao
+Lead mechanical engineer:             Johnny Rourke
 
 How to use this software suite:
 
-This program interfaces with the code on
+This program interfaces the code on
 the Arduino Mega inside the housing of our system through a serial device,
 Which is by default the device at /dev/ttyACM0. This is the port that 
 the Arduino Mega chooses by default, so no extra configuration should be 
@@ -19,8 +30,82 @@ needed unless the port is already in use. If this is the case, change
 the SERIAL_PORT variable to the new device. Try searching for the device
 using "sudo dmesg | grep tty"
 
+The program make file responds to the following commands:
+  make clean - Cleans the build directory of csv files, deleting them
+  make csv - Builds the program and creates a csvcap executable in the build directory
+  make store - Moves all csv files from the build directory to the data directory
+
+Run the program by executing the csvcap executable in the build directory
+with the following command:
+
+  ./csvcap <yourfilename>.csv
+
 When the terminal is started, there are two sections the user will see:
+
 1. The sensor display and settings section
- - This section displays the current sensor readings and allows the user to
-   change settings such as the sampling rate, the number of samples to take,
-   and the type of data to capture.
+- This section displays the current sensor readings and allows the user to
+  change settings such as the sampling rate, the number of samples to take,
+  and the type of data to capture. It has the following fields:
+
+  TIME: The current time in milliseconds since 12:00 AM on January 1, 1970.
+  DEVICE PRESSURE INSIDE: The current pressure inside the device in PSIg.
+  DEVICE PRESSURE OUTSIDE: The current pressure in the hose just outside the device in PSIg.
+  INTERSECTION PRESSURE: The current pressure in the housing between the two solenoid valves in PSIg.
+  ACCELERATION: The current acceleration in the X, Y, and Z axes in mm/s².
+  ANGULAR VELOCITY: The current angular velocity in the X, Y, and Z axes in sixteenths rad/s.
+
+  and the following settings:
+
+  [P]f(P):     The data transmission frequency in pressure readings per second.
+  [I]f(I):     The data transmission frequency in acceleration readings per second.
+  [A]f(A):     The data transmission frequency in angular frequency readings per second.
+  [T]target P: The target pressure inside the device in PSIg, to two significant figures.
+  [F]f(data):  The rate of writing from the data capture buffer to the CSV file in Hertz.
+  [S]f(sol):   Sampling frequency for solenoid valve control in Hertz.
+
+
+2. The terminal section
+- The user can type in the [ Serial Console ] at the bottom of the screen by default when the terminal is selected.
+  There are 14 instructions that the program accepts.
+  The tilde (~) is the command prefix. All commands begin with ~. (Except for help, because how would someone know to type ~ if they need help?)
+  In the notation below, the "i" character represents a number 0 to 9.
+
+  The commands are: 
+
+  ~Diii ~E ~Fii ~Iii ~Pii ~R ~S ~Sii ~Tiii ~X help exit ~? ~Q
+
+  Here are their properties:
+
+  ~E    - Toggle ON or OFF the control system and data capture system.
+  ~R    - Send a reset command to all peripheral microcontrollers, control system OFF, stop data capture.
+  ~Pii  - Set the pressure data transmission rate to ii samples per second.
+  ~Iii  - Set the acceleration data transmission rate to ii samples per second.
+  ~Fii  - Set the data capture buffer write rate to ii samples per second.
+  ~Sii  - Turn ON / Set the solenoid valve control sampling rate to ** Hertz.
+  ~S    - Turn OFF the solenoid valve control system.
+  ~X    - Bypass the solenoid control to trap and isolate air in the balloon.
+  ~Tiii - Set the target pressure of the control system to iii tenths of a PSIg (ii.i = iii /10 PSIg)
+  ~Diii - Stores iii in a buffer which, at the next data capture write, is placed in the 
+          last column of the csv with the newest row of data. We use this to store the diameter 
+          of the balloon in tenths of an inch for later analysis, but it can store any integer value.
+  help, ~? - Displays a help message to console.
+  exit, ~Q - Exits the program.
+
+
+
+The comma separated values (CSV) file will be created in the current directory with the name provided when running the program.
+
+  The program will have the data capture system OFF upon startup, 
+  and the user can toggle the control system and capture system ON or OFF using the ~E command.
+  The rate of data capture can be changed using the ~Fii command.
+  This rate should be less than or equal to the rate of data transmission,
+  set by the ~Pii and ~Iii commands.
+  The program will automatically write the data to a CSV file in the current directory.
+
+  The format of the CSV file is as follows:
+
+  time, internal pressure, end cap pressure, hose pressure, intersection pressure, acceleration X, Y, Z, angular velocity X, Y, Z, diameter (if entered)
+
+  time is in milliseconds since 12:00 AM on January 1, 1970.
+  pressure readings are in microPSIg. IMU data is in mm/s² and sixteenths of rad/s.
+  The CSV file will be named <yourfilename>.csv, where <yourfilename> is the name you provide when you run the program.

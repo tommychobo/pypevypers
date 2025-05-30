@@ -6,8 +6,8 @@
 
 
 
-#define SOL1      A1 // assumed atmospheric solenoid
-#define SOL2      A0 // assumed pressurized solenoid
+#define SOL1      A1 // atmospheric solenoid
+#define SOL2      A0 // pressurized solenoid
 #define PRESS_T   A14
 #define PRESS_2   A13
 #define PRESS_B  A11
@@ -29,7 +29,7 @@ const uint32_t toleranceMicro = 100000;
 
 
 // values controllable by the console
-volatile int target_psi = 15;
+volatile int target_psi_x10 = 0;
 volatile int sample_rate_imu = 100;
 volatile int sample_rate_press = 30;
 volatile int sample_rate_solenoid = 10;
@@ -123,7 +123,7 @@ void setupPulse(int num, int freq){
     case 5:
     //ISR: TIMER5_COMPA_vect
       TCCR5A = 0;
-      TCCR5B = (1<<WGM52)|(1<<CS52);;
+      TCCR5B = (1<<WGM52)|(1<<CS52);
       OCR5A = top;
       TIMSK5 = (1<<OCIE5A);
       break;
@@ -191,9 +191,30 @@ ISR(TIMER3_COMPA_vect){
 }
 
 ISR(TIMER5_COMPA_vect){
-  if(!sol_update_ready){
-    sol_update_ready = true;
+  if(solenoid_control){
+    if(!sol_update_ready){
+      sol_update_ready = true;
+    }
+    int32_t target_micro = (int32_t)target_psi_x10*100000;
+    micro_diff = microPsi_B - target_micro;
+    if(micro_diff > -1* toleranceMicro && micro_diff < toleranceMicro){
+      digitalWrite(SOL1, HIGH); // close atmospheric solenoid
+      digitalWrite(SOL2, HIGH); // close pressurized solenoid
+    }
+    else if(micro_diff > 0){
+      digitalWrite(SOL1, LOW); // open atmospheric solenoid
+      digitalWrite(SOL2, HIGH); // close pressurized solenoid
+    }
+    else if(micro_diff < 0){
+      digitalWrite(SOL1, HIGH); // close atmospheric solenoid
+      digitalWrite(SOL2, LOW); // open pressurized solenoid
+    }
+    else{
+      digitalWrite(SOL1, LOW); // open atmospheric solenoid
+      digitalWrite(SOL2, LOW); // open pressurized solenoid
+    }
   }
+  
 }
 
 void grab_press_data(){
@@ -204,8 +225,8 @@ void grab_press_data(){
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_B = (int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
-  //microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
-  microPsi_2 = micro_diff;
+  microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
+  //microPsi_2 = micro_diff;
 }
 
 void transmitPressure(){
@@ -336,11 +357,11 @@ void serialControls(){
           Serial.println("MEGA:Starting test...");
         }
         break;
-      case 'N': //change the target PSI
-        if(value > 0 && value < PSI_MAX){
-          target_psi = value;
-          Serial.print("MEGA:Target PSI set to ");
-          Serial.println(target_psi);
+      case 'T': //change the target PSI
+        if(value > 0 && value < PSI_MAX*10){
+          target_psi_x10 = value;
+          //Serial.print("MEGA:Target PSI set to ");
+          //Serial.println(target_psi);
         }
         else{
           Serial.println("MEGA:Invalid target PSI");
@@ -371,22 +392,27 @@ void serialControls(){
       case 'D': //store the diameter of the device in the csv file. NOP on the MEGA
         break;
       case 'S': //solenoid control
-        if(solenoid_control){
+        if(value <= 0){ // open the solenoids
           solenoid_control = false;
           digitalWrite(SOL1, LOW);
           digitalWrite(SOL2, LOW);
-          Serial.println("MEGA:Stopping solenoid control...");
-        }
-        else{
+          //Serial.println("MEGA:Opening solenoids...");
+        }else{ // start the solenoid control
           if(value <= 0 || value > 100){
             Serial.println("MEGA:Invalid solenoid duty cycle: specify frequency in Hz");
             delay(100);
           }else{
             solenoid_control = true;
-            Serial.println("MEGA:Starting solenoid control...");
+            //Serial.println("MEGA:Starting solenoid control...");
             setupPulse(5, value);
           }
         }
+        break;
+      case 'X': //close the solenoids
+        solenoid_control = false;
+        digitalWrite(SOL1, HIGH);
+        digitalWrite(SOL2, HIGH);
+        //Serial.println("MEGA:Closing solenoids...");
         break;
       default:
         Serial.println("MEGA:Invalid command");
@@ -397,8 +423,10 @@ void serialControls(){
   
 }
 
+
+// NOT USED NOW, ACTION PERFORMED IN TIMER5 ISR
 void updateSolenoids(){
-  int32_t target_micro = (int32_t)target_psi*1000000;
+  int32_t target_micro = (int32_t)target_psi_x10*100000;
   bool closeAtmospheric = false;
   bool closePressurized = false;
   micro_diff = update_movav(microPsi_B) - target_micro;
@@ -425,8 +453,8 @@ void updateSolenoids(){
     closeAtmospheric = true;
   }
   digitalWrite(SOL1, closeAtmospheric ? HIGH : LOW);
-  digitalWrite(SOL2, closePressurized ? HIGH : LOW);
-  sol_update_ready = false;*/
+  digitalWrite(SOL2, closePressurized ? HIGH : LOW);*/
+  sol_update_ready = false;
 }
 
 void loop() {
@@ -434,9 +462,9 @@ void loop() {
     manageSPI();
     // solenoid_control updated by serialControls(), 
     //sol_update_ready is set by the timer interrupt
-    if(solenoid_control && sol_update_ready){
-      updateSolenoids();
-    }
+    //if(solenoid_control && sol_update_ready){
+      //updateSolenoids();
+    //}
   }
   serialControls();
 }

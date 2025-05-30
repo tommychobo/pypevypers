@@ -33,7 +33,6 @@ const char *pypevypers[6] ={
 };
 
 
-
 /*
 PYPEVYPERS 2025 Lead design engineers
 ~~~ THOMAS CHOBOTER ~~~
@@ -41,7 +40,6 @@ PYPEVYPERS 2025 Lead design engineers
 ~~~ JASON       MAO ~~~
 ~~~ JOHNNY   ROURKE ~~~
 */
-
 
 /*
 KEY
@@ -58,13 +56,14 @@ KEY
 WINDOW *console_win;
 WINDOW *static_win;
 
+int is_running = 1; // global flag to control the main loop
 int sample_rate = 25; // default sampling frequency
 int test_running = 0;
 int sols_running = 0;
 int solenoid_rate = 0;
 int pressure_rate = 0;
 int imu_rate = 0;
-int target_psi = 0;
+int target_psi_x10 = 0;
 int diam_measure = 0; // used to store the diameter measurement manually with ~D###
 // used to store the mean of the last MOVAV_SIZE measurements for each prefix
 int32_t mean_buffer[PREFIX_COUNT] = {0};
@@ -81,16 +80,11 @@ int serial_fd = 0;
 FILE* csv_f = NULL;
 
 
-/*void sig_handler(int signum) {
-    werase(console_win);
-    werase(static_win);
-    tcflush(serial_fd, TCIOFLUSH);
-    clear();
-    close(serial_fd);
-    fclose(csv_f);
-    exit(0);
-}*/
-
+void sig_handler(int signum) {
+    if (signum == SIGINT || signum == SIGTERM) {
+        is_running = 0; // set the flag to stop the main loop
+    }
+}
 // computes the moving average of movav_buffer for prefix idx, 
 // stores in mean_buffer[idx]
 int get_movav(int idx){
@@ -237,8 +231,8 @@ void update_display(int serial_fd, uint64_t stamp){
             (double) mean_buffer_conv[7], (double) mean_buffer_conv[8], (double) mean_buffer_conv[9]);
     char* solenoid_status = (sols_running) ? "ON" : "OFF";
     char* test_status = (test_running) ? "ON" : "OFF";
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "[P]f(P):%4d\t\t [I]f(I):%4d\t [N]target P:%4d\t", 
-        pressure_rate, imu_rate, target_psi);
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "[P]f(P):%4d\t\t [I]f(I):%4d\t [N]target P:%4.1f\t", 
+        pressure_rate, imu_rate, (float)target_psi_x10/10.0);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+9, 4, "[F]f(data):%4d %s\t\t [S]f(sol):%4d %s\t", 
         sample_rate, test_status, solenoid_rate, solenoid_status);
     wrefresh(static_win);
@@ -270,16 +264,14 @@ void handle_user_input() {
         
         push_to_console(user_buf);
         if(user_buf[0]== L'~'){
-            
-            //push_to_console(get_wchars(output_buf+1));
             // handle command on this side
             char* user_string = malloc(SERIAL_BUF_SIZE);
             wcstombs(user_string, user_buf+2, SERIAL_BUF_SIZE);
-            int val = strtol(user_string, NULL, 10);
+            int64_t val = (int64_t)strtol(user_string, NULL, 10);
             free(user_string);
             switch(output_buf[1]){
                 case 'P': //change the frequency of the pressure sensor
-                    if(val > 0 && val < 1000){
+                    if(val > 0 && val < 100){
                         pressure_rate = val;
                         push_to_console(L"TTY:Pressure sample rate set");
                     }else{
@@ -287,7 +279,7 @@ void handle_user_input() {
                     }
                     break;
                 case 'I': //change the frequency of the IMU
-                    if(val > 0 && val < 1000){
+                    if(val > 0 && val < 100){
                         imu_rate = val;
                         push_to_console(L"TTY:IMU sample rate set");
                     }else{
@@ -298,17 +290,21 @@ void handle_user_input() {
                     if(!sols_running && val > 0 && val < 100){
                         solenoid_rate = val;
                         sols_running = 1;
-                        push_to_console(L"TTY:Solenoid control started");
+                        push_to_console(L"TTY:Solenoid control engaged");
                     }else if(sols_running){
                         sols_running = 0;
-                        push_to_console(L"TTY:Solenoid control stopped");
+                        push_to_console(L"TTY:Solenoids OPEN and disengaged");
                     }else{
                         push_to_console(L"TTY:Invalid solenoid duty cycle");
                     }
                     break;
-                case 'N': //change the target PSI
-                    if(val > 0 && val < 150){
-                        target_psi = val;
+                case 'X': //close the solenoids
+                    sols_running = 0;
+                    push_to_console(L"TTY:Solenoids CLOSED and disengaged");
+                    break;
+                case 'T': //change the target PSI
+                    if(val > 0 && val < 1500){
+                        target_psi_x10 = val;
                         push_to_console(L"TTY:Target PSI set");
                     }else{
                         push_to_console(L"TTY:Invalid target PSI");
@@ -328,7 +324,7 @@ void handle_user_input() {
                     push_to_console(L"TTY:Resetting board...");
                     break;
                 case 'F': //change the frequency of the data capture
-                    if(val > 0 && val < 1000){
+                    if(val > 0 && val < 100){
                         sample_rate = val;
                         push_to_console(L"TTY:Data capture rate set");
                     }else{
@@ -336,13 +332,13 @@ void handle_user_input() {
                     }
                     break;
                 case 'D': // store the specified value in the last column of the csv file
-                    if(val >= 0 && val <= 2000){
-                        // store the value in the last column of the csv file
-                        diam_measure = val;
-                        push_to_console(L"TTY:Value stored in csv file");
-                    }else{
-                        push_to_console(L"TTY:Invalid value for D command");
+                    // store the value in the last column of the csv file
+                    if(val <= -200000000000000 && val >= 200000000000000){
+                        push_to_console(L"TTY:No, that's ridiculous. I refuse to store that value.");
+                        break;
                     }
+                    diam_measure = val;
+                    push_to_console(L"TTY:Value sent to be stored in csv file");
                     break;
                 default:
                     break;
@@ -351,6 +347,19 @@ void handle_user_input() {
             if(output_buf[1] != 'D' && output_buf[1] != 'F'){ // D command is not sent to the MEGA
                 write(serial_fd, output_buf, user_line_len + 1);
             }
+        }
+        if(wcscmp(user_buf, L"help") == 0 || wcscmp(user_buf, L"~?") == 0) {
+            // Print available commands
+            push_to_console(L"TTY:Available commands: ('#' = numbers 0-9)");
+            push_to_console(L"~P# | ~I# = Set [pressure sensor | IMU] sample rate (Hz)");
+            push_to_console(L"~S# | ~S  = [start|stop] valve control, [control engage (#=Hz)|open] solenoids");
+            push_to_console(L"~T# | ~X  = [Set target PSI (tenths of a PSIg) | close solenoids]");
+            push_to_console(L"~E  | ~R  = [start/stop|stop] control+data [|and reset the peripherals]");
+            push_to_console(L"~F# | ~D# = Set data capture rate (Hz) | store value in csv file");
+        }
+        if(wcscmp(user_buf, L"exit") == 0 || wcscmp(user_buf, L"~Q")==0){
+            is_running = 0; // set the flag to stop the main loop
+            push_to_console(L"TTY:Exiting...");
         }
         user_line_len = 0; // reset buffer
         user_buf[0] = L'\0'; // reset buffer
@@ -375,10 +384,10 @@ void handle_user_input() {
 
 int main(int argc, char *argv[]) {
 
-    /*if(signal(SIGINT, sig_handler) == SIG_ERR || signal(SIGTERM, sig_handler) == SIG_ERR){
+    if(signal(SIGINT, sig_handler) == SIG_ERR || signal(SIGTERM, sig_handler) == SIG_ERR){
         perror("signal");
         return 1;
-    }*/
+    }
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s output.csv\n", argv[0]);
@@ -404,7 +413,7 @@ int main(int argc, char *argv[]) {
     uint64_t last_display = 0;
 
 
-    while (1) {
+    while (is_running) {
         handle_user_input();
         ssize_t n = read(serial_fd, &c, 1); //altered for testing
         //c = 'l'; // for testing
@@ -460,5 +469,6 @@ int main(int argc, char *argv[]) {
 
     close(serial_fd);
     fclose(csv_f);
+    endwin(); // close ncurses
     return 0;
 }

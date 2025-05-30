@@ -6,8 +6,8 @@
 
 
 
-#define SOL1      A1 // assumed atmospheric solenoid
-#define SOL2      A0 // assumed pressurized solenoid
+#define SOL1      A1 // atmospheric solenoid
+#define SOL2      A0 // pressurized solenoid
 #define PRESS_T   A14
 #define PRESS_2   A13
 #define PRESS_B  A11
@@ -92,7 +92,7 @@ int32_t update_movav(int32_t value){
 void setupPulse(int num, int freq){
   uint32_t top;
   const uint32_t F_CPU_HZ = 16000000UL;
-  const uint16_t prescaler = 64;
+  const uint16_t prescaler = 256;
   
   if(freq <= 0){
     return;
@@ -102,28 +102,28 @@ void setupPulse(int num, int freq){
     case 1:
     //ISR: TIMER1_COMPA_vect
       TCCR1A = 0;
-      TCCR1B = (1<<WGM12)|(1<<CS11)|(1<<CS10);
+      TCCR1B = (1<<WGM12)|(1<<CS12);
       OCR1A = top;
       TIMSK1 = (1<<OCIE1A);
       break;
     case 3:
     //ISR: TIMER3_COMPA_vect
       TCCR3A = 0;
-      TCCR3B = (1<<WGM32)|(1<<CS31)|(1<<CS30);
+      TCCR3B = (1<<WGM32)|(1<<CS32);
       OCR3A = top;
       TIMSK3 = (1<<OCIE3A);
       break;
     case 4:
     //ISR: TIMER4_COMPA_vect
       TCCR4A = 0;
-      TCCR4B = (1<<WGM42)|(1<<CS41)|(1<<CS40);
+      TCCR4B = (1<<WGM42)|(1<<CS42);
       OCR4A = top;
       TIMSK4 = (1<<OCIE4A);
       break;
     case 5:
     //ISR: TIMER5_COMPA_vect
       TCCR5A = 0;
-      TCCR5B = (1<<WGM52)|(1<<CS51)|(1<<CS50);
+      TCCR5B = (1<<WGM52)|(1<<CS52);;
       OCR5A = top;
       TIMSK5 = (1<<OCIE5A);
       break;
@@ -204,8 +204,8 @@ void grab_press_data(){
   microPsi_D = (int32_t)((((int32_t)pressRawD)*5000000/1023 - 500000)*PSI_MAX/4);
   microPsi_B = (int32_t)((((int32_t)pressRawB)*5000000/1023 - 500000)*PSI_MAX_2/4);
   microPsi_T = (int32_t)((((int32_t)pressRawT)*5000000/1023 - 500000)*PSI_MAX/4);
-  //microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
-  microPsi_2 = micro_diff;
+  microPsi_2 = (int32_t)((((int32_t)pressRaw2)*5000000/1023 - 500000)*PSI_MAX/4);
+  //microPsi_2 = micro_diff;
 }
 
 void transmitPressure(){
