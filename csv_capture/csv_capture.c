@@ -231,7 +231,7 @@ void update_display(int serial_fd, uint64_t stamp){
             (double) mean_buffer_conv[7], (double) mean_buffer_conv[8], (double) mean_buffer_conv[9]);
     char* solenoid_status = (sols_running) ? "ON" : "OFF";
     char* test_status = (test_running) ? "ON" : "OFF";
-    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "[P]f(P):%4d\t\t [I]f(I):%4d\t [N]target P:%4.1f\t", 
+    mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+8, 4, "[P]f(P):%4d\t\t [I]f(I):%4d\t [T]target P:%4.1f\t", 
         pressure_rate, imu_rate, (float)target_psi_x10/10.0);
     mvwprintw(static_win, SENSOR_DISPLAY_OFFSET+9, 4, "[F]f(data):%4d %s\t\t [S]f(sol):%4d %s\t", 
         sample_rate, test_status, solenoid_rate, solenoid_status);
